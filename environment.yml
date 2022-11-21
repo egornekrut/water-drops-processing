@@ -1,0 +1,21 @@
+name: water_drops_processing
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pytorch=1.13
+  - torchvision=0.14
+  - cudatoolkit=11.7
+  - easydict
+  - matplotlib
+  - tqdm
+  - pyyaml
+  - opencv
+  - imgaug
+  - albumentations
+  - pip
+  - pip:
+    - segmentation-models-pytorch==0.3.0
+    - timm

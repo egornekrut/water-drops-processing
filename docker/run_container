@@ -1,0 +1,11 @@
+#!/bin/bash
+
+MY_NAME=$(whoami)
+CONT_NAME=$1
+DEVICE_ID=$2
+MNT_DIR=$3
+
+docker run --user ${MY_NAME} --name ${CONT_NAME} \
+--gpus ${DEVICE_ID} --runtime nvidia \
+-v /dev/shm:/dev/shm -v ${MNT_DIR}:/mnt/ \
+--interactive --rm water_drops_processing:${MY_NAME}-v0.1
