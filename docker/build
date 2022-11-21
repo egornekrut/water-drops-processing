@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -e
+
+MY_NAME=$(whoami)
+MY_UID=$(id -u)
+MY_GID=$(id -g)
+
+cp ../environment.yml .
+
+DOCKER_BUILDKIT=1 docker build \
+    --tag "facade_processing_tools:${MY_NAME}-v0.1" \
+    --build-arg MY_NAME=${MY_NAME} \
+    --build-arg MY_UID=${MY_UID} \
+    --build-arg MY_GID=${MY_GID} \
+    --file Dockerfile \
+    .
+
+rm ./environment.yml
