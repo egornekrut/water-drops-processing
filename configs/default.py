@@ -1,4 +1,4 @@
-""" Default config with base parameters """
+""" Default config with base parameters for model training and inference"""
 from pathlib import Path
 
 from easydict import EasyDict
