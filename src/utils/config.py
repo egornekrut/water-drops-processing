@@ -3,7 +3,7 @@ import importlib
 from pathlib import Path
 from typing import Union
 
-from src.utils import str_to_path
+from src.utils.io import str_to_path
 
 
 def get_config():

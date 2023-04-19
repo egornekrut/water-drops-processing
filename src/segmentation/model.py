@@ -2,12 +2,14 @@ from pathlib import Path
 from typing import Union
 
 import torch
-from segmentation_models_pytorch import DeepLabV3
+from segmentation_models_pytorch import UnetPlusPlus
+from segmentation_models_pytorch.base import SegmentationModel
 
-from src.utils import str_to_path, get_config_from_path
+from src.utils.io import str_to_path
+from src.utils.config import get_config_from_path
 
 
-def load_config_and_model(model_root: Union[Path, str]) -> DeepLabV3:
+def load_config_and_model(model_root: Union[Path, str]) -> SegmentationModel:
     """
     Instantly load the model when config.py and ckpt files are presented in the single location.
     :param model_root: Root directory with config.py and model.ckpt files.
@@ -31,16 +33,11 @@ def load_config_and_model(model_root: Union[Path, str]) -> DeepLabV3:
     return setup_segmentation_model(config, True)
 
 
-def setup_segmentation_model(config, load_ckpt: bool = False) -> DeepLabV3:
-    """
-    Setup model for facade segmentaion task.
-    :param config: Easydict config with model state.
-    :param load_ckpt: A path to the ckpt file to load in.
-    :return: Pytorch segmentation model.
-    """
-    model = DeepLabV3(
+def setup_segmentation_model(config, load_ckpt: bool = False) -> SegmentationModel:
+    model = UnetPlusPlus(
         encoder_name=config.encoder_name,
         encoder_weights=None if load_ckpt else 'imagenet',
+        in_channels=1,
         classes=config.segm_num_classes,
     )
 

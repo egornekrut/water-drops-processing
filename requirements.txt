@@ -1,9 +1,7 @@
-pytorch~=1.13
-torchvision~=0.14
-segmentation-models-pytorch==0.3.0
-pyyaml
-timm
-easydict
-matplotlib
-opencv-python
-albumentations
+easydict>=1.9
+
+torch>=2.0.0
+numpy>=1.23.5
+Pillow>=9.4.0
+torchvision>=0.15.0
+segmentation-models-pytorch

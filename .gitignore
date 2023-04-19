@@ -111,4 +111,9 @@ venv.bak/
 .DS_Store
 
 # Pycharm
-.idea
+.idea/
+
+# VScode
+.vscode/
+
+debug.ipynb

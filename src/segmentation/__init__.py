@@ -1,1 +1,0 @@
-from src.segmentation.model import setup_segmentation_model

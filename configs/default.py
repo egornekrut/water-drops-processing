@@ -12,23 +12,31 @@ config.rank = 0
 config.world_size = 1
 
 #  ----- Dataset -----
-config.dataset_path = Path('')
+config.dataset_root = Path('/home/nekrut/datasets/water_processing/v1')
 config.segm_num_classes = 1
+config.num_workers = 2
 
 #  ----- Model -----
-config.model_type = 'DeeplabV3'
-config.encoder_name = 'efficientnet-b5'
-config.ckpt_path = Path('')
+config.model_type = 'UNET'
+config.encoder_name = 'efficientnet-b1'
+config.ckpt_path = Path('/home/nekrut/tmp/train_bubbles/18_04_23-23_34_49/epoch_500.pt')
 
 #  ----- Loss -----
 config.ce_weight = None
 config.ce_label_smoothing = 0
 
 #  ----- Training -----
-config.lr = 1e-3
+config.warmup_steps = 10
+config.epochs = 500
+config.save_model_on = 100
+config.log_step = 1
+
+config.lr = 1e-1
 config.momentum = 9e-1
-config.weight_decay = 1e-5
+config.decay = 1e-6
+config.batch_size = 10
+config.accumulate_batches = 1
 
 config.clip_grad_value = 17
 
-config.save_model_on = 1
+config.logs_dir = Path('/home/nekrut/tmp/train_bubbles')
