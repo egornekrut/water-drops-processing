@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.7.1-devel-ubuntu20.04
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04
 
 # set bash as current shell
 RUN chsh -s /bin/bash
@@ -34,9 +34,9 @@ COPY ./environment.yml /tmp/environment.yml
 RUN conda update conda \
     && conda env create --file /tmp/environment.yml
 
-RUN echo "conda activate facade_processing_tools" >> ~/.bashrc
-ENV PATH /opt/conda/envs/camera-seg/bin:$PATH
-ENV CONDA_DEFAULT_ENV $facade_processing_tools
+RUN echo "conda activate water_drops_processing" >> ~/.bashrc
+ENV PATH /opt/conda/envs/water_drops_processing/bin:$PATH
+ENV CONDA_DEFAULT_ENV $water_drops_processing
 
 ARG MY_NAME
 ARG MY_UID
