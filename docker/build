@@ -13,5 +13,3 @@ DOCKER_BUILDKIT=1 docker build \
     --build-arg MY_GID=${MY_GID} \
     --file Dockerfile_nvcc \
     .
-
-rm ./environment.yml

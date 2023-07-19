@@ -67,13 +67,13 @@ def train(config):
             loss = sigmoid_focal_loss(model_output, gt.to(config.device), reduction='mean')
             loss.backward()
 
-            if (step + 1) % config.accumulate_batches == 0:
-                optimizer.step()
-                optimizer.zero_grad()
+            # if (step + 1) % config.accumulate_batches == 0:
+            optimizer.step()
+            optimizer.zero_grad()
 
             # if step % config.log_step == 0 and step != 0:
-            log = f'epoch {epoch}/{config.epochs} ' \
-                  f'step {step}/{len(dataloader)} ' \
+            log = f'epoch {epoch + 1}/{config.epochs} ' \
+                  f'step {step + 1}/{len(dataloader)} ' \
                   f'loss {loss.detach().cpu().numpy()}'
 
             logger.info(log)

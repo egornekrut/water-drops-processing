@@ -12,7 +12,7 @@ config.rank = 0
 config.world_size = 1
 
 #  ----- Dataset -----
-config.dataset_root = Path('/home/nekrut/datasets/water_processing/v1')
+config.dataset_root = Path('/mnt/dataset/center/train')
 config.segm_num_classes = 1
 config.num_workers = 2
 
@@ -26,17 +26,17 @@ config.ce_weight = None
 config.ce_label_smoothing = 0
 
 #  ----- Training -----
-config.warmup_steps = 10
-config.epochs = 500
-config.save_model_on = 100
-config.log_step = 1
+config.warmup_steps = 5
+config.epochs = 100
+config.save_model_on = 50
+config.log_step = 5
 
-config.lr = 1e-1
-config.momentum = 9e-1
+config.lr = 1e-3
+config.momentum = 1e-5
 config.decay = 1e-6
-config.batch_size = 10
+config.batch_size = 33
 config.accumulate_batches = 1
 
-config.clip_grad_value = 17
+config.clip_grad_value = 30
 
-config.logs_dir = Path('/home/nekrut/tmp/train_bubbles')
+config.logs_dir = Path('/mnt/tmp_output')
