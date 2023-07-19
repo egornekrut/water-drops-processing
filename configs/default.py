@@ -17,9 +17,9 @@ config.segm_num_classes = 1
 config.num_workers = 2
 
 #  ----- Model -----
-config.model_type = 'UNET'
-config.encoder_name = 'efficientnet-b1'
-config.ckpt_path = Path('/home/nekrut/tmp/train_bubbles/18_04_23-23_34_49/epoch_500.pt')
+config.model_type = 'DL3+'
+config.encoder_name = 'efficientnet-b2'
+config.ckpt_path = None #Path('/home/nekrut/tmp/train_bubbles/18_04_23-23_34_49/epoch_500.pt')
 
 #  ----- Loss -----
 config.ce_weight = None

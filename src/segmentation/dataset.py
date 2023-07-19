@@ -26,12 +26,13 @@ class BubDataset(Dataset):
 
         for index, path in enumerate(original_paths):
             name = path.stem
-            self.images_dict[name] = path
-            gt_path = dataset_root / 'gt' / f'{name}_gt.png'
+            name_wo_orig = name.split('_original')[0]
+            self.images_dict[name_wo_orig] = path
+            gt_path = dataset_root / 'mask' / f'{name_wo_orig}_mask.png'
             if not gt_path.exists():
                 raise FileNotFoundError(f'{gt_path} is not exists in dataset folder!')
-            self.gt_dict[name] = gt_path
-            self.idx_mapping[index] = name
+            self.gt_dict[name_wo_orig] = gt_path
+            self.idx_mapping[index] = name_wo_orig
 
         self.transforms = Compose(
             [
@@ -41,7 +42,7 @@ class BubDataset(Dataset):
                     pad_height_divisor=32,
                     pad_width_divisor=32,
                 ),
-                RandomCrop(64, 64),
+                # RandomCrop(64, 64),
                 Flip(),
                 ToTensorV2(),
             ],

@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Union
 
 import torch
-from segmentation_models_pytorch import UnetPlusPlus
+from segmentation_models_pytorch import UnetPlusPlus, DeepLabV3Plus
 from segmentation_models_pytorch.base import SegmentationModel
 
 from src.utils.io import str_to_path
@@ -34,12 +34,15 @@ def load_config_and_model(model_root: Union[Path, str]) -> SegmentationModel:
 
 
 def setup_segmentation_model(config, load_ckpt: bool = False) -> SegmentationModel:
-    model = UnetPlusPlus(
-        encoder_name=config.encoder_name,
-        encoder_weights=None if load_ckpt else 'imagenet',
-        in_channels=1,
-        classes=config.segm_num_classes,
-    )
+    if config.model_type == 'DL3+':
+        model = DeepLabV3Plus(
+            encoder_name=config.encoder_name,
+            encoder_weights=None if load_ckpt else 'imagenet',
+            in_channels=1,
+            classes=config.segm_num_classes,
+        )
+    else:
+        raise NotImplementedError
 
     if load_ckpt:
         state_dict = torch.load(config.ckpt_path, map_location='cpu')
