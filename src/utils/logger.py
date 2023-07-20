@@ -14,7 +14,7 @@ class TensorBoardLog:
     def __init__(self, log_dir):
         self.tb_logger = SummaryWriter(log_dir=log_dir, comment='Training writer.')
 
-    def update(self, curr_step, log_dict, optimizer):
+    def update(self, curr_step, log_dict, optimizer=None):
         """
         Save the current values into tensorboard logger.
 
@@ -30,12 +30,14 @@ class TensorBoardLog:
                 global_step=curr_step,
             )
 
-        for param_lr in optimizer.param_groups:
-            self.tb_logger.add_scalar(
-                tag='learning_rate',
-                scalar_value=param_lr['lr'],
-                global_step=curr_step,
-            )
+        if optimizer:
+            for param_lr in optimizer.param_groups:
+                self.tb_logger.add_scalar(
+                    tag='learning_rate',
+                    scalar_value=param_lr['lr'],
+                    global_step=curr_step,
+                )
+                break
 
 
 class Timer:

@@ -40,3 +40,6 @@ config.accumulate_batches = 1
 config.clip_grad_value = 30
 
 config.logs_dir = Path('/mnt/tmp_output')
+
+#  ----- Training -----
+config.test_root = Path('/mnt/dataset/center/test')

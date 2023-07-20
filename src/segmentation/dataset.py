@@ -14,10 +14,10 @@ from torch.utils.data import Dataset
 
 
 class BubDataset(Dataset):
-    def __init__(self, config):
+    def __init__(self, config, inference_mode: bool = False):
         self.config = config
 
-        dataset_root: Path = self.config.dataset_root
+        dataset_root: Path = self.config.dataset_root if not inference_mode else self.config.test_root
         original_paths = list((dataset_root / 'original').glob('*.png'))
 
         self.images_dict = {}
@@ -34,19 +34,31 @@ class BubDataset(Dataset):
             self.gt_dict[name_wo_orig] = gt_path
             self.idx_mapping[index] = name_wo_orig
 
-        self.transforms = Compose(
-            [
-                PadIfNeeded(
-                    min_height=None,
-                    min_width=None,
-                    pad_height_divisor=32,
-                    pad_width_divisor=32,
-                ),
-                # RandomCrop(64, 64),
-                Flip(),
-                ToTensorV2(),
-            ],
-        )
+        if inference_mode:
+            self.transforms = Compose(
+                [
+                    PadIfNeeded(
+                        min_height=None,
+                        min_width=None,
+                        pad_height_divisor=32,
+                        pad_width_divisor=32,
+                    ),
+                    ToTensorV2(),
+                ],
+            )
+        else:
+            self.transforms = Compose(
+                [
+                    PadIfNeeded(
+                        min_height=None,
+                        min_width=None,
+                        pad_height_divisor=32,
+                        pad_width_divisor=32,
+                    ),
+                    Flip(),
+                    ToTensorV2(),
+                ],
+            )
 
     def __getitem__(self, index) -> Tuple[np.ndarray, np.ndarray]:
         name = self.idx_mapping[index]
