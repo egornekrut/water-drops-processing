@@ -1,25 +1,29 @@
 import argparse
 from pathlib import Path
-from src.segmentation.model import setup_segmentation_model
+from typing import Union
 
+import cv2
+import numpy as np
+import torch
+from albumentations import Compose, Crop, Flip, PadIfNeeded
+from albumentations.pytorch import ToTensorV2
+from PIL import Image
+from torchvision.ops import masks_to_boxes
+
+from src.segmentation.model import setup_segmentation_model
 from src.utils.config import get_config_from_path
 from src.utils.io import str_to_path
-import torch
-from PIL import Image
-import numpy as np
-from albumentations import Compose, Flip, PadIfNeeded, Crop
-from albumentations.pytorch import ToTensorV2
-import cv2
-from torchvision.ops import masks_to_boxes
 
 
 class CenterDetection:
-    def __init__(self, config) -> None:
+    def __init__(self, config, prob_thres=None) -> None:
         self.config = config
+        self.config.prob_thres = prob_thres if prob_thres else self.config.prob_thres
+
         self.config.device = 'cpu' if not torch.cuda.is_available() else self.config.device
 
         self.model = setup_segmentation_model(config, True)
-        self.image_extensions = ['png', 'jpeg', 'jpg']
+        self.image_extensions = ['.png', '.jpeg', '.jpg']
         self.transforms = Compose([
             PadIfNeeded(
                 min_height=None,
@@ -35,9 +39,9 @@ class CenterDetection:
     def run(self, input: Path, out_dir: Path):
         if input.is_dir():
             self.process_dir(input, out_dir)
-        elif input.is_file() and input.stem == 'mp4':
+        elif input.is_file() and input.suffix == '.mp4':
             self.process_video(input, out_dir)
-        elif input.is_file() and input.stem in self.image_extensions:
+        elif input.is_file() and input.suffix in self.image_extensions:
             self.process_image(input, out_dir)
         else:
             print(f'Cannot proceed {input.name}!')
@@ -59,10 +63,9 @@ class CenterDetection:
             out_dir.mkdir(parents=True)
 
         for file in in_dir.glob('*.*'):
-            if not file.stem.lower() in self.image_extensions:
+            if not file.suffix.lower() in self.image_extensions:
                 continue
-            image = Image.open(file)
-            self.process_image(image)
+            self.process_image(file, out_dir)
 
     def process_image(self, file, out_dir):
         image = Image.open(file)
@@ -72,21 +75,21 @@ class CenterDetection:
         cropped_mask.save(out_dir / (file.name + '_crop_mask.' + file.suffix))
         mask_pil.save(out_dir / (file.name + '_mask.' + file.suffix))
 
-    def inference_image(self, image):
-        if isinstance(image, np.ndarray):
-            image = Image.fromarray(image)
-        image = np.asarray(image.convert('L'))
+    def inference_image(self, image_pil: Union[np.ndarray, Image.Image]):
+        if isinstance(image_pil, np.ndarray):
+            image_pil = Image.fromarray(image_pil)
+        image = np.asarray(image_pil.convert('L'))
         original_shape = image.shape
 
         transformed = self.transforms(image=image)
         img_tensor = transformed['image'].to(torch.float32) / 127.5 - 1
 
-        probs = self.predict(img_tensor)[..., :original_shape[0], :original_shape[1]]
+        probs = self.predict(img_tensor.unsqueeze(0))[..., :original_shape[0], :original_shape[1]].squeeze(0)
         mask = probs > self.config.prob_thres
         bbox = masks_to_boxes(mask)
-        mask_pil = Image.fromarray(mask.numpy())
+        mask_pil = Image.fromarray(mask.squeeze(0).numpy().astype(np.uint8) * 255)
         cropped_mask = mask_pil.crop(bbox[0].numpy())
-        cropped_image = image.crop(bbox[0].numpy())
+        cropped_image = image_pil.crop(bbox[0].numpy())
 
 
 
