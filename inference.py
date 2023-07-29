@@ -56,9 +56,9 @@ class CenterDetection:
 
         while success:
             mask_pil, cropped_mask, cropped_image = self.inference_image(frame[..., ::-1])
-            cropped_image.save(out_dir / (vid_path.name + f'_frame_{frame_cnt}_crop.png'))
-            cropped_mask.save(out_dir / (vid_path.name + f'_frame_{frame_cnt}_crop_mask.png'))
-            mask_pil.save(out_dir / (vid_path.name + f'_frame_{frame_cnt}_mask.png'))
+            cropped_image.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop.png'))
+            cropped_mask.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop_mask.png'))
+            mask_pil.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_mask.png'))
             frame_cnt += 1
 
     def process_dir(self, in_dir: Path, out_dir: Path):
@@ -74,9 +74,9 @@ class CenterDetection:
         image = Image.open(file)
         mask_pil, cropped_mask, cropped_image = self.inference_image(image)
 
-        cropped_image.save(out_dir / (file.name + '_crop.' + file.suffix))
-        cropped_mask.save(out_dir / (file.name + '_crop_mask.' + file.suffix))
-        mask_pil.save(out_dir / (file.name + '_mask.' + file.suffix))
+        cropped_image.save(out_dir / (file.stem + '_crop.' + file.suffix))
+        cropped_mask.save(out_dir / (file.stem + '_crop_mask.' + file.suffix))
+        mask_pil.save(out_dir / (file.stem + '_mask.' + file.suffix))
 
     def inference_image(self, image_pil: Union[np.ndarray, Image.Image]):
         if isinstance(image_pil, np.ndarray):
