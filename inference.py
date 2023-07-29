@@ -59,6 +59,8 @@ class CenterDetection:
             cropped_image.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop.png'))
             cropped_mask.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop_mask.png'))
             mask_pil.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_mask.png'))
+
+            success, frame = video.read()
             frame_cnt += 1
 
     def process_dir(self, in_dir: Path, out_dir: Path):
