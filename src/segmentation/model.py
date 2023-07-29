@@ -46,7 +46,7 @@ def setup_segmentation_model(config, load_ckpt: bool = False) -> SegmentationMod
 
     if load_ckpt:
         state_dict = torch.load(config.ckpt_path, map_location='cpu')
-        if 'optimizer' in state_dict.keys():
+        if 'model' in state_dict.keys():
             model.load_state_dict(state_dict['model'])
         else:
             model.load_state_dict(state_dict)
