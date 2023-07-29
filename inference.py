@@ -37,6 +37,9 @@ class CenterDetection:
         ])
 
     def run(self, input: Path, out_dir: Path):
+        if not out_dir.exists():
+            out_dir.mkdir(parents=True)
+
         if input.is_dir():
             self.process_dir(input, out_dir)
         elif input.is_file() and input.suffix == '.mp4':
