@@ -7,7 +7,7 @@ config = EasyDict()
 
 
 #  ----- Runtime -----
-config.device = 'cuda'
+config.device = 'cpu'
 config.rank = 0
 config.world_size = 1
 
@@ -19,7 +19,7 @@ config.num_workers = 2
 #  ----- Model -----
 config.model_type = 'DL3+'
 config.encoder_name = 'efficientnet-b2'
-config.ckpt_path = None #Path('/home/nekrut/tmp/train_bubbles/18_04_23-23_34_49/epoch_500.pt')
+config.ckpt_path = None # Путь до .pt файла 
 
 #  ----- Loss -----
 config.ce_weight = None
@@ -40,6 +40,7 @@ config.accumulate_batches = 1
 config.clip_grad_value = 30
 
 config.logs_dir = Path('/mnt/tmp_output')
-
-#  ----- Training -----
 config.test_root = Path('/mnt/dataset/center/test')
+
+#  ----- Inference -----
+config.prob_thres = 0.5

@@ -36,29 +36,59 @@ class CenterDetection:
             ToTensorV2(),
         ])
 
-    def run(self, input: Path, out_dir: Path):
+    def run(
+            self,
+            input: Path,
+            out_dir: Path,
+            start_frame: int,
+            frame_step: int,
+            end_frame: int,
+        ):
         if not out_dir.exists():
             out_dir.mkdir(parents=True)
 
         if input.is_dir():
             self.process_dir(input, out_dir)
         elif input.is_file() and input.suffix == '.mp4':
-            self.process_video(input, out_dir)
+            self.process_video(
+                input,
+                out_dir,
+                start_frame,
+                frame_step,
+                end_frame,
+            )
         elif input.is_file() and input.suffix in self.image_extensions:
             self.process_image(input, out_dir)
         else:
             print(f'Cannot proceed {input.name}!')
 
-    def process_video(self, vid_path: Path, out_dir: Path):
+    def process_video(
+        self,
+        vid_path: Path,
+        out_dir: Path,
+        start_frame: int = 0,
+        frame_step: int = 1,
+        end_frame: int = -1,
+    ):
+        if start_frame >= end_frame:
+            raise ValueError
+
         video = cv2.VideoCapture(vid_path.as_posix())
         success, frame = video.read()
         frame_cnt = 0
 
         while success:
-            mask_pil, cropped_mask, cropped_image = self.inference_image(frame[..., ::-1])
-            cropped_image.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop.png'))
-            cropped_mask.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop_mask.png'))
-            mask_pil.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_mask.png'))
+            if end_frame <= frame_cnt and end_frame > 0:
+                break
+
+            if frame_cnt <= start_frame:
+                continue
+
+            if frame_cnt % frame_step:
+                mask_pil, cropped_mask, cropped_image = self.inference_image(frame[..., ::-1])
+                cropped_image.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop.png'))
+                cropped_mask.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop_mask.png'))
+                mask_pil.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_mask.png'))
 
             success, frame = video.read()
             frame_cnt += 1
@@ -127,6 +157,24 @@ def parce_input_args():
         help='A folder to save results.',
     )
     parser.add_argument(
+        '--start-frame',
+        default=0,
+        type=int,
+        help='Start frame in video to process.',
+    )
+    parser.add_argument(
+        '--frame-step',
+        default=1,
+        type=int,
+        help='Process every ith frame.',
+    )
+    parser.add_argument(
+        '--end-frame',
+        default=-1,
+        type=int,
+        help='End frame in video to process.',
+    )
+    parser.add_argument(
         '--config',
         default='./configs/default.py',
         type=str,
@@ -138,10 +186,19 @@ def parce_input_args():
     config = get_config_from_path(path_to_config)
     config.inference_input = str_to_path(args.input, check_exist=True)
     config.inference_output = str_to_path(args.output_dir)
+    config.start_frame = str_to_path(args.start_frame)
+    config.frame_step = str_to_path(args.frame_step)
+    config.end_frame = str_to_path(args.end_frame)
 
     return config
 
 
 if __name__ == '__main__':
     config = parce_input_args()
-    CenterDetection(config).run(config.inference_input, config.inference_output)
+    CenterDetection(config).run(
+        config.inference_input,
+        config.inference_output,
+        config.start_frame,
+        config.frame_step,
+        config.end_frame,
+    )
