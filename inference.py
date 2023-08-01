@@ -196,16 +196,25 @@ def parce_input_args():
         type=str,
         help='Path to a config file.',
     )
+    parser.add_argument(
+        '--prob-thres',
+        default=-1,
+        type=float,
+        help='Probability to draw mask.',
+    )
     args = parser.parse_args()
     path_to_config = Path(args.config)
 
     config = get_config_from_path(path_to_config)
     config.inference_input = str_to_path(args.input, check_exist=True)
     config.inference_output = str_to_path(args.output_dir)
-    config.start_frame = str_to_path(args.start_frame)
-    config.frame_step = str_to_path(args.frame_step)
-    config.end_frame = str_to_path(args.end_frame)
-    config.save_orig_frames = str_to_path(args.save_orig_frames)
+
+    config.start_frame = args.start_frame
+    config.frame_step = args.frame_step
+    config.end_frame = args.end_frame
+
+    config.save_orig_frames = args.save_orig_frames
+    config.prob_thres = args.prob_thres if args.prob_thres != -1 else config.prob_thres
 
     return config
 
