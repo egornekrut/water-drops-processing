@@ -9,6 +9,7 @@ from albumentations import Compose, Crop, Flip, PadIfNeeded
 from albumentations.pytorch import ToTensorV2
 from PIL import Image
 from torchvision.ops import masks_to_boxes
+from tqdm import tqdm
 
 from src.segmentation.model import setup_segmentation_model
 from src.utils.config import get_config_from_path
@@ -40,9 +41,10 @@ class CenterDetection:
             self,
             input: Path,
             out_dir: Path,
-            start_frame: int,
-            frame_step: int,
-            end_frame: int,
+            start_frame: int = 0,
+            frame_step: int = 1,
+            end_frame: int = -1,
+            save_orig_frames: bool = True,
         ):
         if not out_dir.exists():
             out_dir.mkdir(parents=True)
@@ -69,29 +71,37 @@ class CenterDetection:
         start_frame: int = 0,
         frame_step: int = 1,
         end_frame: int = -1,
+        save_orig_frames: bool = True,
     ):
+        (out_dir / 'original_crops').mkdir(exist_ok=True, parents=True)
+        (out_dir / 'mask_crops').mkdir(exist_ok=True, parents=True)
+        (out_dir / 'masks').mkdir(exist_ok=True, parents=True)
+
+        if save_orig_frames:
+                (out_dir / 'original').mkdir(exist_ok=True, parents=True)
+
         if start_frame >= end_frame:
             raise ValueError
 
         video = cv2.VideoCapture(vid_path.as_posix())
-        success, frame = video.read()
-        frame_cnt = 0
 
-        while success:
-            if end_frame <= frame_cnt and end_frame > 0:
-                break
+        total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
 
-            if frame_cnt <= start_frame:
-                continue
+        if end_frame > total_frames:
+            end_frame = total_frames
 
-            if frame_cnt % frame_step:
-                mask_pil, cropped_mask, cropped_image = self.inference_image(frame[..., ::-1])
-                cropped_image.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop.png'))
-                cropped_mask.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_crop_mask.png'))
-                mask_pil.save(out_dir / (vid_path.stem + f'_frame_{frame_cnt}_mask.png'))
+        for fno in tqdm(range(start_frame, end_frame, frame_step)):
+            video.set(cv2.CAP_PROP_POS_FRAMES, fno)
+            _, frame = video.read()
+            frame = frame[..., ::-1]
 
-            success, frame = video.read()
-            frame_cnt += 1
+            if save_orig_frames:
+                Image.fromarray(frame).save(out_dir / 'original' / (vid_path.stem + f'_frame_{fno}_crop.png'))
+
+            mask_pil, cropped_mask, cropped_image = self.inference_image(frame)
+            cropped_image.save(out_dir / 'original_crops' / (vid_path.stem + f'_frame_{fno}_crop.png'))
+            cropped_mask.save(out_dir / 'mask_crops' / (vid_path.stem + f'_frame_{fno}_crop_mask.png'))
+            mask_pil.save(out_dir / 'masks' / (vid_path.stem + f'_frame_{fno}_mask.png'))
 
     def process_dir(self, in_dir: Path, out_dir: Path):
         if not out_dir.exists():
@@ -175,6 +185,12 @@ def parce_input_args():
         help='End frame in video to process.',
     )
     parser.add_argument(
+        '--save-orig-frames',
+        default=True,
+        type=bool,
+        help='Is to save original video frames.',
+    )
+    parser.add_argument(
         '--config',
         default='./configs/default.py',
         type=str,
@@ -189,6 +205,7 @@ def parce_input_args():
     config.start_frame = str_to_path(args.start_frame)
     config.frame_step = str_to_path(args.frame_step)
     config.end_frame = str_to_path(args.end_frame)
+    config.save_orig_frames = str_to_path(args.save_orig_frames)
 
     return config
 
@@ -201,4 +218,5 @@ if __name__ == '__main__':
         config.start_frame,
         config.frame_step,
         config.end_frame,
+        config.save_orig_frames,
     )
