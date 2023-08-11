@@ -4,17 +4,19 @@ from typing import Tuple
 import cv2
 import numpy as np
 import torch
-from PIL import Image
-from albumentations import Compose
-from albumentations import Flip
-from albumentations import PadIfNeeded
-from albumentations import RandomCrop
+from albumentations import Compose, Flip, PadIfNeeded
 from albumentations.pytorch import ToTensorV2
+from PIL import Image
 from torch.utils.data import Dataset
+from torchvision.ops import masks_to_boxes
 
 
 class BubDataset(Dataset):
-    def __init__(self, config, inference_mode: bool = False):
+    def __init__(
+            self,
+            config,
+            inference_mode: bool = False,
+        ):
         self.config = config
 
         dataset_root: Path = self.config.dataset_root if not inference_mode else self.config.test_root
@@ -68,15 +70,15 @@ class BubDataset(Dataset):
         transformed = self.transforms(image=img, mask=gt)
 
         img_tensor = transformed['image'].to(torch.float32) / 127.5 - 1
-        gt_tensor = (transformed['mask'] > 0).to(torch.float32)
+        gt_tensor = torch.unsqueeze((transformed['mask'] > 0).to(torch.float32), dim=0)
 
-        return img_tensor, torch.unsqueeze(gt_tensor, dim=0)
+        return img_tensor, gt_tensor
 
     def __len__(self):
         return len(self.idx_mapping)
 
 
-class InferenceProcessor:
+class InferenceDataset:
     def __init__(self):
         self.transforms = Compose([
             PadIfNeeded(

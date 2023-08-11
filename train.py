@@ -3,7 +3,7 @@ from pathlib import Path
 from torch import no_grad
 import numpy as np
 from torch import save
-from torch.optim import SGD, RAdam
+from torch.optim import AdamW
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.data import DataLoader
 from torchvision.ops.focal_loss import sigmoid_focal_loss
@@ -50,7 +50,7 @@ def train(config):
     )
     model = setup_segmentation_model(config)
 
-    optimizer = RAdam(model.parameters(), lr=config.lr, weight_decay=config.decay)
+    optimizer = AdamW(model.parameters(), lr=config.lr, weight_decay=config.decay)
     scheduler = MultiStepLR(optimizer, milestones=[int(0.5 * config.epochs), int(0.75 * config.epochs)], gamma=0.1)
 
     running_loss = []

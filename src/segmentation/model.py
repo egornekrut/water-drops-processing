@@ -4,6 +4,7 @@ from typing import Union
 import torch
 from segmentation_models_pytorch import UnetPlusPlus, DeepLabV3Plus
 from segmentation_models_pytorch.base import SegmentationModel
+from ultralytics import YOLO
 
 from src.utils.io import str_to_path
 from src.utils.config import get_config_from_path
@@ -41,7 +42,7 @@ def setup_segmentation_model(config, load_ckpt: bool = False) -> SegmentationMod
             in_channels=1,
             classes=config.segm_num_classes,
         )
-    else:
+    elif:
         raise NotImplementedError
 
     if load_ckpt:
@@ -55,5 +56,11 @@ def setup_segmentation_model(config, load_ckpt: bool = False) -> SegmentationMod
     model.eval()
 
     model.config = config
+
+    return model
+
+
+def setup_detection_model(config) -> YOLO:
+    model = YOLO(config.detector_weights)
 
     return model
