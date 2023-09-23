@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Union
 
 import torch
-from segmentation_models_pytorch import UnetPlusPlus, DeepLabV3Plus
+from segmentation_models_pytorch import UnetPlusPlus, DeepLabV3Plus, Unet
 from segmentation_models_pytorch.base import SegmentationModel
 from ultralytics import YOLO
 
@@ -42,7 +42,14 @@ def setup_segmentation_model(config, load_ckpt: bool = False) -> SegmentationMod
             in_channels=1,
             classes=config.segm_num_classes,
         )
-    elif:
+    elif config.model_type == 'unet':
+        model = Unet(
+            encoder_name=config.encoder_name,
+            encoder_weights=None if load_ckpt else 'imagenet',
+            in_channels=1,
+            classes=config.segm_num_classes,
+        )
+    else:
         raise NotImplementedError
 
     if load_ckpt:

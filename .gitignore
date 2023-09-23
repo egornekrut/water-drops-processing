@@ -117,5 +117,6 @@ venv.bak/
 .vscode/
 
 debug.ipynb
-.weights/
-.runs/
+weights/
+runs/
+saved_pics/

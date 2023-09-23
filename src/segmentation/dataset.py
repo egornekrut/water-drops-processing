@@ -4,11 +4,10 @@ from typing import Tuple
 import cv2
 import numpy as np
 import torch
-from albumentations import Compose, Flip, PadIfNeeded
+from albumentations import Compose, Flip, PadIfNeeded, RandomCrop, RandomBrightnessContrast
 from albumentations.pytorch import ToTensorV2
 from PIL import Image
 from torch.utils.data import Dataset
-from torchvision.ops import masks_to_boxes
 
 
 class BubDataset(Dataset):
@@ -51,21 +50,26 @@ class BubDataset(Dataset):
         else:
             self.transforms = Compose(
                 [
-                    PadIfNeeded(
-                        min_height=None,
-                        min_width=None,
-                        pad_height_divisor=32,
-                        pad_width_divisor=32,
+                    # PadIfNeeded(
+                    #     min_height=None,
+                    #     min_width=None,
+                    #     pad_height_divisor=32,
+                    #     pad_width_divisor=32,
+                    # ),
+                    RandomCrop(
+                        height=256,
+                        width=256,
                     ),
                     Flip(),
+                    RandomBrightnessContrast(),
                     ToTensorV2(),
                 ],
             )
 
     def __getitem__(self, index) -> Tuple[np.ndarray, np.ndarray]:
         name = self.idx_mapping[index]
-        img = np.asarray(Image.open(self.images_dict[name]).convert('L'))
-        gt = np.asarray(Image.open(self.gt_dict[name]).convert('L'))
+        img = np.asarray(Image.open(self.images_dict[name]).convert('L')).copy()
+        gt = np.asarray(Image.open(self.gt_dict[name]).convert('L')).copy()
 
         transformed = self.transforms(image=img, mask=gt)
 
