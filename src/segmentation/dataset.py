@@ -4,7 +4,7 @@ from typing import Tuple
 import cv2
 import numpy as np
 import torch
-from albumentations import Compose, Flip, PadIfNeeded, RandomCrop, RandomBrightnessContrast
+from albumentations import Compose, Flip, PadIfNeeded, RandomCrop, RandomBrightnessContrast, Rotate, Affine
 from albumentations.pytorch import ToTensorV2
 from PIL import Image
 from torch.utils.data import Dataset
@@ -56,12 +56,14 @@ class BubDataset(Dataset):
                     #     pad_height_divisor=32,
                     #     pad_width_divisor=32,
                     # ),
+                    # Rotate(limit=60, interpolation=cv2.INTER_LINEAR, border_mode=cv2.BORDER_CONSTANT, value=127, mask_value=0),
+                    # Affine(),
                     RandomCrop(
-                        height=256,
-                        width=256,
+                        height=480,
+                        width=480,
                     ),
                     Flip(),
-                    RandomBrightnessContrast(),
+                    RandomBrightnessContrast(brightness_limit=0.05, contrast_limit=0.3),
                     ToTensorV2(),
                 ],
             )

@@ -11,7 +11,7 @@ from PIL import Image
 from torchvision.ops import masks_to_boxes
 from tqdm import tqdm
 
-# from src.segmentation.model import setup_segmentation_model
+from src.segmentation.model import setup_segmentation_model
 from src.utils.config import get_config_from_path
 from src.utils.io import str_to_path
 
@@ -24,7 +24,8 @@ class BubblesProcessor:
         self.config.device = 'cpu' if not torch.cuda.is_available() else self.config.device
 
         # Instance Segmentation model
-        self.step_1_model = YOLO(self.config.ckpt_path)
+        self.step_1_model = YOLO(self.config.step_1_ckpt_path)
+        self.step_2_model = setup_segmentation_model(self.config, True)
 
         self.image_extensions = ['.png', '.jpeg', '.jpg']
         self.transforms = Compose([
@@ -129,23 +130,24 @@ class BubblesProcessor:
             _, frame = video.read()
             frame = frame[..., ::-1]
 
-            if save_orig_frames:
-                Image.fromarray(frame).save(original_frames_folder / (vid_path.stem + f'_frame_{fno}.png'))
-
             if save_txt:
                 txt_save_path = txt_folder / f'{vid_path.stem}_frame_{fno}.txt'
             else:
                 txt_save_path = None
 
-            mask_pil, cropped_mask, cropped_image, plotted_results = self.inference_image(frame, txt_save_path=txt_save_path)
+            mask_pil, cropped_mask, cropped_image, plotted_results, bub_image = self.inference_image(frame, txt_save_path=txt_save_path)
 
             if save_plotted_results:
                 plotted_results.save(plotted_results_folder / (vid_path.stem + f'_frame_{fno}_plot.png'))
             if save_crops:
                 cropped_mask.save(mask_crops_folder / (vid_path.stem + f'_frame_{fno}_mask_crop.png'))
                 cropped_image.save(orig_crops_folder / (vid_path.stem + f'_frame_{fno}_orig_crop.png'))
+
+            if save_orig_frames:
+                Image.fromarray(frame).save(original_frames_folder / (vid_path.stem + f'_frame_{fno}.png'))
                 
             mask_pil.save(output_masks_folder / (vid_path.stem + f'_frame_{fno}_mask.png'))
+            bub_image.save(output_masks_folder / (vid_path.stem + f'_frame_{fno}_bubles.png'))
 
     def process_dir(self, in_dir: Path, out_dir: Path):
         if not out_dir.exists():
@@ -180,15 +182,16 @@ class BubblesProcessor:
             image_pil = Image.fromarray(image_pil)
 
         # image = np.asarray(image_pil.convert('L'))
-        yolo_results = self.step_1_model(image_pil, verbose=False, conf=self.config.prob_thres, retina_masks=True, iou=0.9)[0]
+        yolo_results = self.step_1_model(image_pil, verbose=False, conf=self.config.prob_thres, retina_masks=True)[0]
         
         plotted_results = yolo_results.plot()[..., ::-1]
         classes = yolo_results.boxes.cls
-
+        
+        full_mask = np.zeros((*image_pil.size[::-1], 3), dtype=np.uint8)
         color_pic = np.zeros(pic_size, dtype=np.uint8)
-        bbox = None
-        if len(classes):
+        bboxes = {}
 
+        if len(classes):
             if txt_save_path:
                 yolo_results.save_txt(txt_save_path)
 
@@ -197,30 +200,39 @@ class BubblesProcessor:
                 single_mask = masks[cls_id]
                 pic_channel = (single_mask == 1).cpu().numpy().astype(dtype=np.uint8) * 255
                 color_pic[..., int(cls)] = pic_channel
-                if int(cls) == 0:
-                    bbox = yolo_results.boxes.xyxy[cls_id].cpu().numpy()
-            
-        # transformed = self.transforms(image=image)
-        # img_tensor = transformed['image'].to(torch.float32) / 127.5 - 1
-        # probs = self.predict(img_tensor.unsqueeze(0))[..., :original_shape[0], :original_shape[1]].squeeze(0)
-        # mask = probs > self.config.prob_thres
-        # bbox = masks_to_boxes(mask)
-        # mask_pil = Image.fromarray(mask.squeeze(0).numpy().astype(np.uint8) * 255)
-        
+                # if int(cls) == 0:
+                bboxes[int(cls)] = yolo_results.boxes.xyxy[cls_id].cpu().numpy()
+
+                if int(cls) == 1:
+                    bounding_box = [int(i) for i in bboxes[int(cls)]]
+                    probs = self.draw_bubbles(image_pil.crop(bounding_box).convert('L'))
+                    bubble_mask = (probs > self.config.prob_thres).astype(np.uint8)[:bounding_box[2]-bounding_box[0], :bounding_box[3]-bounding_box[1]]
+
+                    full_mask[bounding_box[0]:bounding_box[2], bounding_box[1]:bounding_box[3], 0] = bubble_mask
+
         mask_pil = Image.fromarray(color_pic)
 
-        if bbox is not None:
-            cropped_mask = mask_pil.crop(bbox)
-            cropped_image = image_pil.crop(bbox)
+        if 0 in bboxes is not None:
+            cropped_mask = mask_pil.crop(bboxes[0])
+            cropped_image = image_pil.crop(bboxes[0])
         else:
             cropped_mask = mask_pil
             cropped_image = image_pil
-        
-        return mask_pil, cropped_mask, cropped_image, Image.fromarray(plotted_results)
+
+        if full_mask.sum():
+            full_image = Image.blend(image_pil, Image.fromarray(full_mask), 0.5)
+        else:
+            full_image = image_pil
+
+        return mask_pil, cropped_mask, cropped_image, Image.fromarray(plotted_results), full_image
 
     @torch.no_grad()
-    def predict(self, image):
-        return torch.sigmoid(self.model(image.to(self.config.device))).to('cpu')
+    def draw_bubbles(self, image):
+        transformed = self.transforms(image=np.asarray(image))
+        img_tensor = transformed['image'].to(torch.float32) / 127.5 - 1
+        model_output = self.step_2_model(img_tensor.to(self.config.device).unsqueeze(0)).to('cpu')
+
+        return model_output.squeeze((0, 1)).numpy()
 
     @staticmethod
     def decode(tensor: torch.Tensor) -> Image:
@@ -234,13 +246,15 @@ def parce_input_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--input',
-        required=True,
+        required=False,
+        default='/mnt/c/Users/egorn/Desktop/WDP/videos/4.6.mp4',
         type=str,
         help='A instance to process, should be video or folder.',
     )
     parser.add_argument(
         '--output-dir',
-        required=True,
+        required=False,
+        default='./tmp_output',
         type=str,
         help='A folder to save results.',
     )

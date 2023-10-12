@@ -48,12 +48,14 @@ def setup_segmentation_model(config, load_ckpt: bool = False) -> SegmentationMod
             encoder_weights=None if load_ckpt else 'imagenet',
             in_channels=1,
             classes=config.segm_num_classes,
+            decoder_attention_type='scse',
+            activation='sigmoid',
         )
     else:
         raise NotImplementedError
 
     if load_ckpt:
-        state_dict = torch.load(config.ckpt_path, map_location='cpu')
+        state_dict = torch.load(config.step_2_ckpt_path, map_location='cpu')
         if 'model' in state_dict.keys():
             model.load_state_dict(state_dict['model'])
         else:
