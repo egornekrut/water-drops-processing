@@ -8,4 +8,5 @@ segmentation-models-pytorch==0.3.3
 matplotlib
 tqdm
 pyyaml
+openpyxl
 git+https://github.com/facebookresearch/segment-anything.git

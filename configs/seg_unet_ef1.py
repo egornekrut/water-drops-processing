@@ -44,4 +44,4 @@ config.clip_grad_value = 10
 config.logs_dir = Path('/home/nekrut/tmp/seg_train_wdp/unet_fs_ef1')
 
 #  ----- Training -----
-config.test_root = None
+config.test_root = Path('/home/nekrut/dataset/water_processing/seg_fs/')
