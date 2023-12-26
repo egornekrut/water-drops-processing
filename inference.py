@@ -1,21 +1,23 @@
 import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
-from ultralytics import YOLO
+
 import cv2
 import numpy as np
+import pandas as pd
+import pims
 import torch
 from albumentations import Compose, Crop, Flip, PadIfNeeded
 from albumentations.pytorch import ToTensorV2
 from PIL import Image, ImageDraw
 from torchvision.ops import masks_to_boxes
 from tqdm import tqdm
+from ultralytics import YOLO
+from ultralytics.engine.results import Results
 
 from src.segmentation.model import setup_segmentation_model
 from src.utils.config import get_config_from_path
 from src.utils.io import str_to_path
-from ultralytics.engine.results import Results
-import pandas as pd
 
 
 class BubblesProcessor:
@@ -47,11 +49,11 @@ class BubblesProcessor:
 
     def run(
         self,
-        input: Path,
+        input_arg: Path,
         out_dir: Path,
         start_frame: int = 0,
         frame_step: int = 1,
-        end_frame: int = 0,
+        end_frame: int = -1,
         save_orig_frames: bool = True,
         save_crops: bool = True,
         save_plotted_results: bool = True,
@@ -61,13 +63,13 @@ class BubblesProcessor:
         if not out_dir.exists():
             out_dir.mkdir(parents=True)
 
-        if input.is_dir():
+        if input_arg.is_dir():
             raise NotImplementedError
-            self.process_dir(input, out_dir)
+            self.process_dir(input_arg, out_dir)
 
-        elif input.is_file() and input.suffix == '.mp4':
+        elif input_arg.is_file() and input_arg.suffix == '.mp4':
             self.process_video(
-                input,
+                input_arg,
                 out_dir,
                 start_frame,
                 frame_step,
@@ -77,12 +79,24 @@ class BubblesProcessor:
                 save_plotted_results,
                 save_txt,
             )
-        elif input.is_file() and input.suffix in self.image_extensions:
+        elif input_arg.is_file() and input_arg.suffix == '.cine':
+            self.process_cine_video(
+                input_arg,
+                out_dir,
+                start_frame,
+                frame_step,
+                end_frame,
+                save_orig_frames,
+                save_crops,
+                save_plotted_results,
+                save_txt,
+            )
+        elif input_arg.is_file() and input_arg.suffix in self.image_extensions:
             raise NotImplementedError
-            self.process_image(input, out_dir)
+            self.process_image(input_arg, out_dir)
         else:
             raise NotImplementedError
-            print(f'Cannot proceed {input.name}!')
+            print(f'Cannot proceed {input_arg.name}!')
 
     def setup_output_folders(
         self,
@@ -187,7 +201,7 @@ class BubblesProcessor:
         out_dir: Path,
         start_frame: int = 0,
         frame_step: int = 1,
-        end_frame: int = 0,
+        end_frame: int = -1,
         save_orig_frames: bool = True,
         save_crops: bool = True,
         save_plotted_results: bool = True,
@@ -207,12 +221,10 @@ class BubblesProcessor:
         if start_frame > total_frames:
             raise ValueError(f'Cannot find start frame No {start_frame} with max {total_frames}!')
 
-        if end_frame == 0:
+        if end_frame == -1:
             end_frame = total_frames
         elif end_frame > total_frames:
             end_frame = total_frames
-
-
 
         print(f'Start processing video from {start_frame} to {end_frame} frame with step {frame_step}.')
         for fno in tqdm(range(start_frame, end_frame, frame_step)):
@@ -230,6 +242,8 @@ class BubblesProcessor:
         pd.DataFrame.from_dict(self.statistics, orient='index').to_excel(out_dir / f'{vid_path.stem}_stat.xlsx')
 
     def process_dir(self, in_dir: Path, out_dir: Path):
+        raise NotImplementedError
+
         if not out_dir.exists():
             out_dir.mkdir(parents=True)
 
@@ -251,6 +265,47 @@ class BubblesProcessor:
     #     cropped_image.save(out_dir / (file.stem + '_crop.' + file.suffix))
     #     cropped_mask.save(out_dir / (file.stem + '_crop_mask.' + file.suffix))
     #     mask_pil.save(out_dir / (file.stem + '_mask.' + file.suffix))
+
+    def process_cine_video(
+        self,
+        vid_path: Path,
+        out_dir: Path,
+        start_frame: int = 0,
+        frame_step: int = 1,
+        end_frame: int = -1,
+        save_orig_frames: bool = True,
+        save_crops: bool = True,
+        save_plotted_results: bool = True,
+        save_txt: bool = False,
+    ):
+        cine_images = pims.open(vid_path.as_posix())
+        self.setup_output_folders(
+            out_dir,
+            save_orig_frames,
+            save_crops,
+            save_plotted_results,
+            save_txt,
+        )
+
+        if end_frame == -1:
+            end_frame = len(cine_images)
+
+        iterator = tqdm(range(start_frame, end_frame, frame_step), total=(end_frame - start_frame) // frame_step)
+
+        for enum, idx in enumerate(iterator):
+            # grayscale img with (h, w) dimensions
+            uint8_img = cv2.normalize(np.asarray(cine_images[idx]), None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+            if save_txt:
+                txt_save_path = self.txt_folder / f'{vid_path.stem}_frame_{idx}.txt'
+            else:
+                txt_save_path = None
+
+            answer = self.process_img_step1(uint8_img, txt_save_path=txt_save_path, save_plotted_results=save_plotted_results)
+
+            self.saver(answer, idx)
+    
+        pd.DataFrame.from_dict(self.statistics, orient='index').to_excel(out_dir / f'{vid_path.stem}_stat.xlsx')
 
     def process_img_step1(
             self,

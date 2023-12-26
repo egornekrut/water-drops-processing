@@ -7,7 +7,7 @@ config = EasyDict()
 
 
 #  ----- Runtime -----
-config.device = 'cuda'
+config.device = 'cpu'
 config.rank = 0
 config.world_size = 1
 
@@ -22,7 +22,7 @@ config.step_1_ckpt_path = Path('./weights/yolon_step1.pt')
 #  ----- Model 2 -----
 config.model_type = 'unet'
 config.encoder_name = 'efficientnet-b2'
-config.step_2_ckpt_path = Path('/home/nekrut/tmp/seg_train_wdp/unet_fs_ef1/09_10_23-23_20_44/epoch_2000.pt')
+config.step_2_ckpt_path = Path('./weights/epoch_2000.pt')
 
 #  ----- Loss -----
 config.ce_weight = None
