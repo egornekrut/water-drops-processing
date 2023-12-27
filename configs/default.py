@@ -7,7 +7,7 @@ config = EasyDict()
 
 
 #  ----- Runtime -----
-config.device = 'cpu'
+config.device = 'cuda' # cuda если есть видеокарта
 config.rank = 0
 config.world_size = 1
 
@@ -17,7 +17,7 @@ config.segm_num_classes = 1
 config.num_workers = 1
 
 #  ----- Model -----
-config.step_1_ckpt_path = Path('./weights/yolon_step1.pt')
+config.step_1_ckpt_path = Path('./weights/yolos-seg-beta.pt')
 
 #  ----- Model 2 -----
 config.model_type = 'unet'
