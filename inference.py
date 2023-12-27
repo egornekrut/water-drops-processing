@@ -157,11 +157,11 @@ class BubblesProcessor:
         # if 'cropped_bubbles' in answer:
         #     answer['cropped_bubbles'].save(self.output_masks_folder / ('' + f'frame_{no}.png'))
         self.statistics[no] = {
-            'Диаметр_w': answer['diam_w'] * scale_px_mm,
-            'Диаметр_h': answer['diam_h'] * scale_px_mm,
-            'Диаметр_avg': (answer['diam_h'] + answer['diam_w']) * scale_px_mm / 2,
-            'Площадь_капли': answer['droplet_area'] * (scale_px_mm ** 2),
-            'Диаметр_fomula': 2 * scale_px_mm * np.sqrt(answer['droplet_area'] / np.pi),
+            'Диаметр_w': answer.get('diam_w', 0) * scale_px_mm,
+            'Диаметр_h': answer.get('diam_h', 0) * scale_px_mm,
+            'Диаметр_avg': (answer.get('diam_h', 0) + answer.get('diam_w', 0)) * scale_px_mm / 2,
+            'Площадь_капли': answer.get('droplet_area', 0) * (scale_px_mm ** 2),
+            'Диаметр_fomula': 2 * scale_px_mm * np.sqrt(answer.get('droplet_area', 0) / np.pi),
         }
 
         if ruptures_stat:
