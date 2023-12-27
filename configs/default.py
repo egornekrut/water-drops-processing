@@ -45,5 +45,5 @@ config.logs_dir = Path('/home/nekrut/tmp/seg_train_wdp/unet_fs_ef1')
 
 #  ----- Test -----
 config.test_root = None
-config.step1_thres = 0.05
+config.step1_thres = 0.8
 config.step2_thres = 0.99

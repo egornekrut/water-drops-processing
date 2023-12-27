@@ -58,6 +58,7 @@ class BubblesProcessor:
         save_crops: bool = True,
         save_plotted_results: bool = True,
         save_txt: bool = False,
+        scale_px_mm: float = 1,
     ):
         self.statistics = {}
         if not out_dir.exists():
@@ -78,6 +79,7 @@ class BubblesProcessor:
                 save_crops,
                 save_plotted_results,
                 save_txt,
+                scale_px_mm,
             )
         elif input_arg.is_file() and input_arg.suffix == '.cine':
             self.process_cine_video(
@@ -90,6 +92,7 @@ class BubblesProcessor:
                 save_crops,
                 save_plotted_results,
                 save_txt,
+                scale_px_mm,
             )
         elif input_arg.is_file() and input_arg.suffix in self.image_extensions:
             raise NotImplementedError
@@ -138,7 +141,7 @@ class BubblesProcessor:
     def xywh_xyxy(box, img_size):
         return ((box[0] - box[2] / 2) * img_size[0], (box[1] - box[3] / 2) * img_size[1], (box[0] + box[2] / 2) * img_size[0], (box[1] + box[3] / 2) * img_size[1])
 
-    def saver(self, answer: Dict, no):
+    def saver(self, answer: Dict, no, scale_px_mm: float = 1., ruptures_stat: bool = True):
             # if save_plotted_results:
             #     plotted_results.save(plotted_results_folder / (vid_path.stem + f'_frame_{fno}_plot.png'))
             # if save_crops:
@@ -153,12 +156,24 @@ class BubblesProcessor:
 
         # if 'cropped_bubbles' in answer:
         #     answer['cropped_bubbles'].save(self.output_masks_folder / ('' + f'frame_{no}.png'))
+        self.statistics[no] = {
+            'Диаметр_w': answer['diam_w'] * scale_px_mm,
+            'Диаметр_h': answer['diam_h'] * scale_px_mm,
+            'Площадь_капли': answer['droplet_area'] * (scale_px_mm ** 2),
+            'Диаметр_fomula': 2 * np.sqrt(answer['droplet_area'] / np.pi),
+        }
+
+        if ruptures_stat:
+            self.statistics[no]['Число разрывов'] = len(answer['ruptures_stat'])
+            self.statistics[no]['Площадь разрывов'] = sum([rupt['size_px'] for rupt in answer['ruptures_stat']]) * (scale_px_mm ** 2)
 
         if 'cropped_bubbles_masked' in answer:
             bubbles_mask = answer['cropped_bubbles_masked']
             bubbles_mask.save(self.output_bubs_masks_folder / ('' + f'frame_{no}_masked_bubles.png'))
     
             bboxes = self.get_bbox_from_mask(bubbles_mask)
+            self.statistics[no]['Число пузырей в РЗ'] = len(bboxes)
+
             bubbles_mask_new = bubbles_mask.copy().convert('RGB')
             orig_crop = answer['orig_zone_crop'].convert('RGB')
 
@@ -174,12 +189,9 @@ class BubblesProcessor:
             # item.save(self.output_masks_folder / ('' + f'frame_{no}_masked.png'))
             bubbles_mask_new.save(self.output_boxed_masks_folder / ('' + f'frame_{no}_masked_boxes.png'))
             orig_crop.save(self.output_boxed_masks_folder / ('' + f'frame_{no}_orig_bubbles.png'))
+        else:
+            self.statistics[no]['Число пузырей в РЗ'] = 0
 
-            self.statistics[no] = {
-                'Число пузырей в РЗ': len(bboxes),
-                'Диаметр_w': answer['diam_w'],
-                'Диаметр_h': answer['diam_h'],
-            }
         if 'plotted_results' in answer:
             answer['plotted_results'].save(self.plotted_results_folder / f'frame_{no}_plot.png')
 
@@ -206,6 +218,7 @@ class BubblesProcessor:
         save_crops: bool = True,
         save_plotted_results: bool = True,
         save_txt: bool = False,
+        scale_px_mm: float = 1.,
     ):  
         self.setup_output_folders(
             out_dir,
@@ -237,7 +250,7 @@ class BubblesProcessor:
             else:
                 txt_save_path = None
             answer = self.process_img_step1(frame, txt_save_path=txt_save_path, save_plotted_results=save_plotted_results)
-            self.saver(answer, fno)
+            self.saver(answer, fno, scale_px_mm)
     
         pd.DataFrame.from_dict(self.statistics, orient='index').to_excel(out_dir / f'{vid_path.stem}_stat.xlsx')
 
@@ -277,6 +290,7 @@ class BubblesProcessor:
         save_crops: bool = True,
         save_plotted_results: bool = True,
         save_txt: bool = False,
+        scale_px_mm: float = 1.,
     ):
         cine_images = pims.open(vid_path.as_posix())
         self.setup_output_folders(
@@ -301,9 +315,14 @@ class BubblesProcessor:
             else:
                 txt_save_path = None
 
-            answer = self.process_img_step1(uint8_img, txt_save_path=txt_save_path, save_plotted_results=save_plotted_results)
+            answer = self.process_img_step1(
+                uint8_img,
+                txt_save_path=txt_save_path,
+                save_plotted_results=save_plotted_results,
+                ruptures_stat=True,
+            )
 
-            self.saver(answer, idx)
+            self.saver(answer, idx, scale_px_mm)
     
         pd.DataFrame.from_dict(self.statistics, orient='index').to_excel(out_dir / f'{vid_path.stem}_stat.xlsx')
 
@@ -320,6 +339,7 @@ class BubblesProcessor:
             verbose=False,
             conf=self.config.step1_thres,
             retina_masks=True,
+            device=self.config.device,
         )
         return self.gather_yolo_results(yolo_answer[0], image_pil, **kwargs)
 
@@ -360,9 +380,14 @@ class BubblesProcessor:
             plotted_results = yolo_answer.plot()[..., ::-1]
             answer['plotted_results'] = Image.fromarray(plotted_results)
 
+        # Трекаем число и размеры разрывов, добавляем в лист
+        answer['ruptures_stat'] = []
+
         full_mask = np.zeros(hwc_size[:2], dtype=np.uint8)
+        ruptures = np.zeros(hwc_size, dtype=np.uint8)
         color_pic = np.zeros(hwc_size, dtype=np.uint8)
         bboxes = {}
+        # TODO: ДОБАВИТЬ СОВМЕЩЕНИЕ МАСОК, ЕСЛИ НАШЛОСЬ НЕСКОЛЬКО ОБЪЕКТОВ
 
         if len(classes):
             if kwargs.get('txt_save_path', False):
@@ -370,16 +395,24 @@ class BubblesProcessor:
     
             masks = yolo_answer.masks.data
     
-            for cls_id, cls in enumerate(classes):
-                single_mask = masks[cls_id]
+            for cls_enum, cls in enumerate(classes):
+                single_mask = masks[cls_enum]
                 pic_channel = (single_mask == 1).cpu().numpy().astype(dtype=np.uint8)
-                color_pic[..., int(cls)] = pic_channel * 255
-                bboxes[int(cls)] = yolo_answer.boxes.xyxy[cls_id].cpu().numpy()
-                if int(cls) == 0:
-                    answer['diam_w'] = yolo_answer.boxes.xywh[cls_id].cpu().numpy()[2]
-                    answer['diam_h'] = yolo_answer.boxes.xywh[cls_id].cpu().numpy()[3]
 
-                if int(cls) == 1:
+                if int(cls) == 2:
+                    ruptures[..., 0] += pic_channel * 255
+                    ruptures[..., 2] += pic_channel * 255
+                else:
+                    color_pic[..., int(cls)] += pic_channel * 255
+
+                bboxes[int(cls)] = yolo_answer.boxes.xyxy[cls_enum].cpu().numpy()
+
+                if int(cls) == 0:
+                    answer['diam_w'] = yolo_answer.boxes.xywh[cls_enum].cpu().numpy()[2]
+                    answer['diam_h'] = yolo_answer.boxes.xywh[cls_enum].cpu().numpy()[3]
+                    answer['droplet_area'] = pic_channel.sum()
+
+                elif int(cls) == 1:
                     bounding_box = [int(np.round(i)) for i in bboxes[int(cls)]]
                     orig_zone_crop = image_pil.crop(bounding_box).convert('L')
 
@@ -394,7 +427,32 @@ class BubblesProcessor:
 
                     masked_bubs = bubbles * mask_zone
                     answer['cropped_bubbles_masked'] = Image.fromarray(masked_bubs)
-    
+
+                elif int(cls) == 2:
+                    # Разрывы
+                    answer['ruptures_stat'].append(
+                        {
+                            'size_px': pic_channel.sum(),
+                            'height': yolo_answer.boxes.xywh[cls_enum].cpu().numpy()[3],
+                            'width': yolo_answer.boxes.xywh[cls_enum].cpu().numpy()[2],
+                        }
+                    )
+
+                    # bounding_box = [int(np.round(i)) for i in bboxes[int(cls)]]
+                    # orig_zone_crop = image_pil.crop(bounding_box).convert('L')
+
+                    # bubbles = self.draw_bubbles(orig_zone_crop)
+
+                    # # full_mask[bounding_box[0]:bounding_box[2], bounding_box[1]:bounding_box[3]] = bubbles
+                    # # answer['full_bubbles'] = Image.fromarray(full_mask)
+                    # answer['cropped_bubbles'] = Image.fromarray(bubbles)
+                    # mask_zone = pic_channel[bounding_box[1]:bounding_box[3], bounding_box[0]:bounding_box[2]]
+                    # answer['zone_mask'] = Image.fromarray(mask_zone * 255)
+
+                    # masked_bubs = bubbles * mask_zone
+                    # answer['cropped_bubbles_masked'] = Image.fromarray(masked_bubs)
+
+        color_pic[ruptures.sum(axis=-1) > 0] = (255, 0, 255)
         mask_pil = Image.fromarray(color_pic)
 
         if 0 in bboxes is not None:
