@@ -159,8 +159,9 @@ class BubblesProcessor:
         self.statistics[no] = {
             'Диаметр_w': answer['diam_w'] * scale_px_mm,
             'Диаметр_h': answer['diam_h'] * scale_px_mm,
+            'Диаметр_avg': (answer['diam_h'] + answer['diam_w']) * scale_px_mm / 2,
             'Площадь_капли': answer['droplet_area'] * (scale_px_mm ** 2),
-            'Диаметр_fomula': 2 * np.sqrt(answer['droplet_area'] / np.pi),
+            'Диаметр_fomula': 2 * scale_px_mm * np.sqrt(answer['droplet_area'] / np.pi),
         }
 
         if ruptures_stat:
