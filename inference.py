@@ -1,20 +1,20 @@
 import argparse
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import cv2
 import numpy as np
 import pandas as pd
 import pims
 import torch
-from albumentations import Compose, Crop, Flip, PadIfNeeded
+from albumentations import Compose, PadIfNeeded
 from albumentations.pytorch import ToTensorV2
 from PIL import Image, ImageDraw
-from torchvision.ops import masks_to_boxes
 from tqdm import tqdm
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
+from src.analysis.radius import ray_radius_estimator
 from src.segmentation.model import setup_segmentation_model
 from src.utils.config import get_config_from_path
 from src.utils.io import str_to_path
@@ -122,20 +122,29 @@ class BubblesProcessor:
         if save_orig_frames:
             self.original_frames_folder = output_pics_folder / 'original_frames'
             self.original_frames_folder.mkdir(exist_ok=True, parents=True)
+        else:
+            self.original_frames_folder = None
 
         if save_plotted_results:
             self.plotted_results_folder = output_pics_folder / 'plotted_results'
             self.plotted_results_folder.mkdir(exist_ok=True, parents=True)
+        else:
+            self.plotted_results_folder = None
 
         if save_crops:
             self.orig_crops_folder = output_pics_folder / 'orig_crops'
             self.orig_crops_folder.mkdir(exist_ok=True, parents=True)
             self.mask_crops_folder = output_pics_folder / 'mask_crops'
             self.mask_crops_folder.mkdir(exist_ok=True, parents=True)
-        
+        else:
+            self.orig_crops_folder = None
+            self.mask_crops_folder = None
+
         if save_txt:
             self.txt_folder = output_pics_folder / 'txt_labels'
             self.txt_folder.mkdir(exist_ok=True, parents=True)
+        else:
+            self.txt_folder = None
 
     @staticmethod
     def xywh_xyxy(box, img_size):
@@ -156,13 +165,19 @@ class BubblesProcessor:
 
         # if 'cropped_bubbles' in answer:
         #     answer['cropped_bubbles'].save(self.output_masks_folder / ('' + f'frame_{no}.png'))
-        self.statistics[no] = {
-            'Диаметр_w': answer.get('diam_w', 0) * scale_px_mm,
-            'Диаметр_h': answer.get('diam_h', 0) * scale_px_mm,
-            'Диаметр_avg': (answer.get('diam_h', 0) + answer.get('diam_w', 0)) * scale_px_mm / 2,
-            'Площадь_капли': answer.get('droplet_area', 0) * (scale_px_mm ** 2),
-            'Диаметр_fomula': 2 * scale_px_mm * np.sqrt(answer.get('droplet_area', 0) / np.pi),
-        }
+        self.statistics[no] = {}
+        for key, elem in answer.items():
+            if 'Диаметр' in key:
+                self.statistics[no][key] = elem * scale_px_mm
+            if 'Площадь' in key:
+                self.statistics[no][key] = elem * (scale_px_mm ** 2)
+
+        # self.statistics[no] = {
+        #     'Диаметр_w': answer.get('diam_w', 0) * scale_px_mm,
+        #     'Диаметр_h': answer.get('diam_h', 0) * scale_px_mm,
+        #     'Диаметр_avg': (answer.get('diam_h', 0) + answer.get('diam_w', 0)) * scale_px_mm / 2,
+        #     'Площадь_капли': answer.get('droplet_area', 0) * (scale_px_mm ** 2),
+        # }
 
         if ruptures_stat:
             self.statistics[no]['Число разрывов'] = len(answer['ruptures_stat'])
@@ -193,19 +208,19 @@ class BubblesProcessor:
         else:
             self.statistics[no]['Число пузырей в РЗ'] = 0
 
-        if 'plotted_results' in answer:
+        if 'plotted_results' in answer and self.plotted_results_folder:
             answer['plotted_results'].save(self.plotted_results_folder / f'frame_{no}_plot.png')
 
-        if 'full_image' in answer:
+        if 'full_image' in answer and self.original_frames_folder:
             answer['full_image'].save(self.original_frames_folder / f'frame_{no}_original.png')
 
-        if 'full_mask' in answer:
+        if 'full_mask' in answer and self.mask_full_folder:
             answer['full_mask'].save(self.mask_full_folder / f'frame_{no}_mask.png')
 
-        if 'cropped_image' in answer:
+        if 'cropped_image' in answer and self.orig_crops_folder:
             answer['cropped_image'].save(self.orig_crops_folder / f'frame_{no}_original_crop.png')
 
-        if 'cropped_mask' in answer:
+        if 'cropped_mask' in answer and self.mask_crops_folder:
             answer['cropped_mask'].save(self.mask_crops_folder /  f'frame_{no}_mask_crop.png')
 
     def process_video(
@@ -397,24 +412,22 @@ class BubblesProcessor:
             masks = yolo_answer.masks.data
     
             for cls_enum, cls in enumerate(classes):
+                cls_int = int(cls)
                 single_mask = masks[cls_enum]
                 pic_channel = (single_mask == 1).cpu().numpy().astype(dtype=np.uint8)
 
-                if int(cls) == 2:
-                    ruptures[..., 0] += pic_channel * 255
-                    ruptures[..., 2] += pic_channel * 255
-                else:
-                    color_pic[..., int(cls)] += pic_channel * 255
+                color_pic[..., cls_int] += pic_channel * 255
 
-                bboxes[int(cls)] = yolo_answer.boxes.xyxy[cls_enum].cpu().numpy()
+                bboxes[cls_int] = yolo_answer.boxes.xyxy[cls_enum].cpu().numpy()
 
-                if int(cls) == 0:
-                    answer['diam_w'] = yolo_answer.boxes.xywh[cls_enum].cpu().numpy()[2]
-                    answer['diam_h'] = yolo_answer.boxes.xywh[cls_enum].cpu().numpy()[3]
-                    answer['droplet_area'] = pic_channel.sum()
+                if cls_int == 0:
+                    n_radius = kwargs.get('n_radius', 32)
+                    answer[f'Диаметр_лучи_{n_radius}'] = ray_radius_estimator(pic_channel * 255, n_radius)
+                    answer['Диаметр_бокс'] = float(yolo_answer.boxes.xywh[cls_int, 2:].mean().cpu())
+                    answer['Диаметр_pir2'] = 2 * np.sqrt(pic_channel.sum() / np.pi)
 
-                elif int(cls) == 1:
-                    bounding_box = [int(np.round(i)) for i in bboxes[int(cls)]]
+                elif cls_int == 1:
+                    bounding_box = [int(np.round(i)) for i in bboxes[cls_int]]
                     orig_zone_crop = image_pil.crop(bounding_box).convert('L')
 
                     answer['orig_zone_crop'] = orig_zone_crop
@@ -429,8 +442,10 @@ class BubblesProcessor:
                     masked_bubs = bubbles * mask_zone
                     answer['cropped_bubbles_masked'] = Image.fromarray(masked_bubs)
 
-                elif int(cls) == 2:
+                elif cls_int == 2:
                     # Разрывы
+                    ruptures[..., 0] += pic_channel * 255
+                    ruptures[..., 2] += pic_channel * 255
                     answer['ruptures_stat'].append(
                         {
                             'size_px': pic_channel.sum(),
