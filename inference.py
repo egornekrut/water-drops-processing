@@ -15,13 +15,20 @@ from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
 from src.analysis.radius import ray_radius_estimator
+from src.fframe.dataset import FFInfDataset
 from src.segmentation.model import setup_segmentation_model
 from src.utils.config import get_config_from_path
 from src.utils.io import str_to_path
 
+from src.fframe.model import FrameClassModel
 
 class BubblesProcessor:
-    def __init__(self, config=None, prob_thres=None) -> None:
+    def __init__(
+        self,
+        config=None,
+        prob_thres=None,
+        auto_frame: bool = True,
+    ) -> None:
         if config:
             self.config = config
         else:
@@ -29,6 +36,13 @@ class BubblesProcessor:
         # self.config.prob_thres = prob_thres if prob_thres else self.config.prob_thres
 
         self.config.device = 'cpu' if not torch.cuda.is_available() else self.config.device
+
+        ### FFrame model
+        self.auto_frame = auto_frame
+        if self.auto_frame:
+            self.fframe_model = FrameClassModel(1)
+            self.fframe_model.load_state_dict(torch.load(self.config.fframe_ckpt_path, map_location='cpu'))
+            self.fframe_model.to(self.config.device)
 
         # Instance Segmentation model
         self.step_1_model = YOLO(self.config.step_1_ckpt_path)
@@ -59,6 +73,8 @@ class BubblesProcessor:
         save_plotted_results: bool = True,
         save_txt: bool = False,
         scale_px_mm: float = 1,
+        auto_frame_first_offset: int = -10,
+        auto_frame_last_offset: int = 200,
     ):
         self.statistics = {}
         if not out_dir.exists():
@@ -93,6 +109,8 @@ class BubblesProcessor:
                 save_plotted_results,
                 save_txt,
                 scale_px_mm,
+                auto_frame_first_offset,
+                auto_frame_last_offset,
             )
         elif input_arg.is_file() and input_arg.suffix in self.image_extensions:
             raise NotImplementedError
@@ -294,6 +312,25 @@ class BubblesProcessor:
     #     cropped_image.save(out_dir / (file.stem + '_crop.' + file.suffix))
     #     cropped_mask.save(out_dir / (file.stem + '_crop_mask.' + file.suffix))
     #     mask_pil.save(out_dir / (file.stem + '_mask.' + file.suffix))
+    
+    @torch.inference_mode()
+    def find_first_frame(self, vid_path: Path, ff_thres = 0.5):
+        ff_dataset = FFInfDataset(vid_path=vid_path)
+        # pred_res_x2 = torch.zeros(3, dtype=torch.bfloat16)
+        pred_res = torch.zeros(3)
+
+        fframe_res = 0
+
+        with torch.autocast(device_type=self.config.device):
+            for idx, frame_pack in enumerate(ff_dataset):
+                is_ff = self.fframe_model(frame_pack.unsqueeze(0).to(self.config.device)).sigmoid().to(device='cpu', dtype=torch.float32)[0] > ff_thres
+                if is_ff.max() and pred_res.max():
+                    fframe_res = idx
+                    break
+                # pred_res_x2 = pred_res
+                pred_res = is_ff
+
+        return fframe_res
 
     def process_cine_video(
         self,
@@ -307,8 +344,9 @@ class BubblesProcessor:
         save_plotted_results: bool = True,
         save_txt: bool = False,
         scale_px_mm: float = 1.,
+        auto_frame_first_offset: int = -10,
+        auto_frame_last_offset: int = 200,
     ):
-        cine_images = pims.open(vid_path.as_posix())
         self.setup_output_folders(
             out_dir,
             save_orig_frames,
@@ -316,6 +354,15 @@ class BubblesProcessor:
             save_plotted_results,
             save_txt,
         )
+
+        cine_images = pims.open(vid_path.as_posix())
+
+        if self.auto_frame and start_frame == 0:
+            start_frame = self.find_first_frame(vid_path)
+            if start_frame != 0:
+                start_frame = max(start_frame - auto_frame_first_offset, 0)
+                end_frame = min(start_frame + auto_frame_last_offset, len(cine_images))
+                print(f'Первый кадр автоматически обнаружен: {start_frame}. Задам последний кадр: {end_frame}.')
 
         if end_frame == -1:
             end_frame = len(cine_images)

@@ -5,7 +5,6 @@ from easydict import EasyDict
 
 config = EasyDict()
 
-
 #  ----- Runtime -----
 config.device = 'cuda' # cuda если есть видеокарта
 config.rank = 0
@@ -15,6 +14,9 @@ config.world_size = 1
 config.dataset_root = Path('/home/nekrut/dataset/water_processing/seg_fs/')
 config.segm_num_classes = 1
 config.num_workers = 1
+
+# ----- FFrame -----
+config.fframe_ckpt_path = Path('./weights/fframe_v1.pt')
 
 #  ----- Model -----
 config.step_1_ckpt_path = Path('./weights/yolos-seg-beta.pt')
