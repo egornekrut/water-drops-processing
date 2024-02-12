@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pims
@@ -16,11 +17,11 @@ from ultralytics.engine.results import Results
 
 from src.analysis.radius import ray_radius_estimator
 from src.fframe.dataset import FFInfDataset
+from src.fframe.model import FrameClassModel
 from src.segmentation.model import setup_segmentation_model
 from src.utils.config import get_config_from_path
 from src.utils.io import str_to_path
 
-from src.fframe.model import FrameClassModel
 
 class BubblesProcessor:
     def __init__(
@@ -43,6 +44,8 @@ class BubblesProcessor:
             self.fframe_model = FrameClassModel(1)
             self.fframe_model.load_state_dict(torch.load(self.config.fframe_ckpt_path, map_location='cpu'))
             self.fframe_model.to(self.config.device)
+        
+        self.ffprobs_plot = None
 
         # Instance Segmentation model
         self.step_1_model = YOLO(self.config.step_1_ckpt_path)
@@ -75,6 +78,7 @@ class BubblesProcessor:
         scale_px_mm: float = 1,
         auto_frame_first_offset: int = -10,
         auto_frame_last_offset: int = 200,
+        auto_frame_thres: float = 0.5,
     ):
         self.statistics = {}
         if not out_dir.exists():
@@ -111,6 +115,7 @@ class BubblesProcessor:
                 scale_px_mm,
                 auto_frame_first_offset,
                 auto_frame_last_offset,
+                auto_frame_thres,
             )
         elif input_arg.is_file() and input_arg.suffix in self.image_extensions:
             raise NotImplementedError
@@ -318,17 +323,37 @@ class BubblesProcessor:
         ff_dataset = FFInfDataset(vid_path=vid_path)
         # pred_res_x2 = torch.zeros(3, dtype=torch.bfloat16)
         pred_res = torch.zeros(3)
-
+        all_probs = [0]
         fframe_res = 0
+        itetator = tqdm(range(0, len(ff_dataset)), total=len(ff_dataset))
 
-        with torch.autocast(device_type=self.config.device):
-            for idx, frame_pack in enumerate(ff_dataset):
-                is_ff = self.fframe_model(frame_pack.unsqueeze(0).to(self.config.device)).sigmoid().to(device='cpu', dtype=torch.float32)[0] > ff_thres
-                if is_ff.max() and pred_res.max():
-                    fframe_res = idx
-                    break
-                # pred_res_x2 = pred_res
-                pred_res = is_ff
+        for idx in itetator:
+            frame_pack = ff_dataset[idx]
+            itetator.set_description(f'Выполняется поиск певого кадра')
+            
+            with torch.autocast(device_type=self.config.device):
+                probs = self.fframe_model(frame_pack.unsqueeze(0).to(self.config.device)).sigmoid().to(device='cpu', dtype=torch.float32)[0]
+            
+            # is_ff = probs > ff_thres
+            # all_probs[-2] += probs[0].item()
+            # all_probs[-2] /= 2
+            all_probs[-1] += probs[0].item()
+            all_probs[-1] /= 2
+            all_probs.append(probs[1].item())
+
+            if all_probs[-1] > ff_thres:
+                fframe_res = idx - 1
+                break
+            # pred_res_x2 = pred_res
+            # pred_res = is_ff
+
+        like_hood_ff = np.argmax(all_probs)
+        self.ffprobs_plot = plt.plot(all_probs, label='Вероятности')
+        self.ffprobs_plot = plt.vlines(x = like_hood_ff, ymin=0, ymax=max(all_probs) + 0.1, colors='red', label=f'Предполагаемый первый кадр: {np.argmax(all_probs)}', ls=':', lw=2)
+        plt.xlabel('Кадры')
+        plt.ylabel('Вероятность')
+        plt.title('Распределение вероятностей первых кадров по видео')
+        plt.legend()
 
         return fframe_res
 
@@ -346,6 +371,7 @@ class BubblesProcessor:
         scale_px_mm: float = 1.,
         auto_frame_first_offset: int = -10,
         auto_frame_last_offset: int = 200,
+        auto_frame_thres: float = 0.5,
     ):
         self.setup_output_folders(
             out_dir,
@@ -358,11 +384,14 @@ class BubblesProcessor:
         cine_images = pims.open(vid_path.as_posix())
 
         if self.auto_frame and start_frame == 0:
-            start_frame = self.find_first_frame(vid_path)
+            start_frame = self.find_first_frame(vid_path, auto_frame_thres)
             if start_frame != 0:
                 start_frame = max(start_frame - auto_frame_first_offset, 0)
                 end_frame = min(start_frame + auto_frame_last_offset, len(cine_images))
                 print(f'Первый кадр автоматически обнаружен: {start_frame}. Задам последний кадр: {end_frame}.')
+            else:
+                print('Первый кадр не был обнаружен. Перезапустите процесс с ручной настройкой!')
+                return None
 
         if end_frame == -1:
             end_frame = len(cine_images)
