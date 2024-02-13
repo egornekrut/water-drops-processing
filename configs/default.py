@@ -16,7 +16,7 @@ config.segm_num_classes = 1
 config.num_workers = 1
 
 # ----- FFrame -----
-config.fframe_ckpt_path = Path('./weights/fframe_v1.pt')
+config.fframe_ckpt_path = Path('./weights/fframe_v2.pt')
 
 #  ----- Model -----
 config.step_1_ckpt_path = Path('./weights/yolos-seg-beta.pt')

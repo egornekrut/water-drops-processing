@@ -17,30 +17,22 @@ class FrameClassModel(Module):
                 in_channels=1,
                 out_channels=16,
                 kernel_size=(1, 5, 5),
-                stride=(1, 2, 2),
-                padding=0,
-                bias=False,
-            ),
-            Conv3d(
-                in_channels=16,
-                out_channels=16,
-                kernel_size=(1, 1, 1),
-                stride=1,
+                stride=(1, 3, 3),
                 padding=0,
                 bias=True,
             ),
             BatchNorm3d(16),
             SiLU(True),
-            MBConvPlusBlock(16, 16),
-            MBConvPlusBlock(16, 32, stride=2),
+            MBConvPlusBlock(16, 16, time_dim_ch=5),
+            MBConvPlusBlock(16, 32, stride=2, kernel_time_size=3, time_dim_ch=5),
             MBConvPlusBlock(32, 32),
-            # MBConvPlusBlock(32, 64, stride=2),
-            # MBConvPlusBlock(64, 64),
-            AdaptiveAvgPool3d((3, 1, 1)),
+            MBConvPlusBlock(32, 64, stride=2, kernel_time_size=3, time_dim_ch=3),
+            MBConvPlusBlock(64, 64),
+            AdaptiveAvgPool3d((1, 1, 1)),
         )
         self.classifier = Sequential(
             Dropout(p=0.2, inplace=True),
-            Linear(32 * 3, 3),
+            Linear(64, 1),
         )
 
     def forward(self, x: Tensor):
@@ -55,8 +47,10 @@ class MBConvPlusBlock(Module):
             out_ch: int,
             exp_ratio: float = 2,
             kernel_size: int = 3,
+            kernel_time_size: int = 1,
             stride: int = 1,
             st_depth_prob: float = 0.2,
+            time_dim_ch=1,
         ) -> None:
         super().__init__()
         self.middle_channels = int(in_ch * exp_ratio)
@@ -85,11 +79,12 @@ class MBConvPlusBlock(Module):
                 self.middle_channels,
                 max(1, self.middle_channels // 4),
                 activation=partial(SiLU, True),
+                time_dim_ch=time_dim_ch,
             ),
             Conv3d(
                 in_channels= self.middle_channels,
                 out_channels=out_ch,
-                kernel_size=(1, 1, 1),
+                kernel_size=(kernel_time_size, 1, 1),
                 stride=1,
                 padding=0,
             ),

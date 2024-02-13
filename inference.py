@@ -41,10 +41,12 @@ class BubblesProcessor:
         ### FFrame model
         self.auto_frame = auto_frame
         if self.auto_frame:
-            self.fframe_model = FrameClassModel(1)
-            self.fframe_model.load_state_dict(torch.load(self.config.fframe_ckpt_path, map_location='cpu'))
-            self.fframe_model.to(self.config.device)
-        
+            fframe_model = FrameClassModel(1)
+            fframe_model.load_state_dict(torch.load(self.config.fframe_ckpt_path, map_location='cpu'))
+            fframe_model.to(self.config.device)
+            fframe_model.eval()
+            self.fframe_model = torch.compile(fframe_model)
+
         self.ffprobs_plot = None
 
         # Instance Segmentation model
@@ -321,35 +323,26 @@ class BubblesProcessor:
     @torch.inference_mode()
     def find_first_frame(self, vid_path: Path, ff_thres = 0.5):
         ff_dataset = FFInfDataset(vid_path=vid_path)
-        # pred_res_x2 = torch.zeros(3, dtype=torch.bfloat16)
-        pred_res = torch.zeros(3)
-        all_probs = [0]
+        all_probs = [0, 0]
         fframe_res = 0
-        itetator = tqdm(range(0, len(ff_dataset)), total=len(ff_dataset))
+        itetator = tqdm(range(2, len(ff_dataset)), total=len(ff_dataset))
 
         for idx in itetator:
             frame_pack = ff_dataset[idx]
             itetator.set_description(f'Выполняется поиск певого кадра')
             
             with torch.autocast(device_type=self.config.device):
-                probs = self.fframe_model(frame_pack.unsqueeze(0).to(self.config.device)).sigmoid().to(device='cpu', dtype=torch.float32)[0]
-            
-            # is_ff = probs > ff_thres
-            # all_probs[-2] += probs[0].item()
-            # all_probs[-2] /= 2
-            all_probs[-1] += probs[0].item()
-            all_probs[-1] /= 2
-            all_probs.append(probs[1].item())
+                prob = self.fframe_model(frame_pack.unsqueeze(0).to(self.config.device)).sigmoid().to(device='cpu', dtype=torch.float32).squeeze()
+            all_probs.append(prob.item())
 
-            if all_probs[-1] > ff_thres:
-                fframe_res = idx - 1
+            if prob > ff_thres:
+                # Считаем, что первый кадр, пробивший вероятность является первым
+                fframe_res = idx
                 break
-            # pred_res_x2 = pred_res
-            # pred_res = is_ff
 
         like_hood_ff = np.argmax(all_probs)
         self.ffprobs_plot = plt.plot(all_probs, label='Вероятности')
-        self.ffprobs_plot = plt.vlines(x = like_hood_ff, ymin=0, ymax=max(all_probs) + 0.1, colors='red', label=f'Предполагаемый первый кадр: {np.argmax(all_probs)}', ls=':', lw=2)
+        self.ffprobs_plot = plt.vlines(x = like_hood_ff, ymin=0, ymax=max(all_probs) + 0.1, colors='red', label=f'Предполагаемый первый кадр: {np.argmax(all_probs)}, p = {np.max(all_probs):.2f}', ls=':', lw=2)
         plt.xlabel('Кадры')
         plt.ylabel('Вероятность')
         plt.title('Распределение вероятностей первых кадров по видео')

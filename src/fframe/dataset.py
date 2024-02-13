@@ -19,15 +19,16 @@ class FFDataset(Dataset):
         self.has_contact = {}
 
         npy_files = list(self.data_root.glob('*.npy'))
-        self.train_label = np.empty((len(npy_files), 3), dtype=bool)
+        self.train_label = np.empty(len(npy_files), dtype=np.int32)
 
         for idx, npy_path in enumerate(npy_files):
             self.dataset[idx] = npy_path
             name_parts = npy_path.stem.split('_')
+            concact_no = int(name_parts[2])
             npy_has_frames = [int(frame) for frame in name_parts[1].split('-')]
-            npy_has_frames_arr = np.array((npy_has_frames[0], npy_has_frames[1] - 1, npy_has_frames[1])) == int(name_parts[2]) + 1
-            self.train_label[idx, :] = npy_has_frames_arr
-            self.has_contact[idx] = int(npy_has_frames_arr.max())
+            # npy_has_frames_arr = # np.array((npy_has_frames[0], , npy_has_frames[1])) 
+            self.train_label[idx] = int(npy_has_frames[1] - 2 == concact_no)
+            self.has_contact[idx] = int(npy_has_frames[1] - 2 == concact_no)
 
         self.augs = Compose(
             [
@@ -60,11 +61,11 @@ class FFInfDataset(Dataset):
         self.cine_images = pims.open(self.vid_path.as_posix())
 
     def __len__(self):
-        return len(self.cine_images) - 3
+        return len(self.cine_images) - 2
 
     def __getitem__(self, index: int) -> Tensor:
         # d, w, h --> w, h, d
-        image_series = np.asarray(self.cine_images[index:index + 3], np.float32)
+        image_series = np.asarray(self.cine_images[index - 2:index + 3], np.float32)
         image_series = normalize_cine(image_series)
 
         # w, h, d --> c, d, h, w

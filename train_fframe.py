@@ -62,7 +62,7 @@ def train(config):
     # )
     model = FrameClassModel(config.batch_size)
     model.to(config.device)
-
+    model_opt = torch.compile(model, mode='reduce-overhead')
     optimizer = AdamW(
         model.parameters(),
         lr=config.lr,
@@ -82,25 +82,13 @@ def train(config):
 
     # loss_fn = ComboLoss(alpha=0.5)
     scaler = GradScaler()
-
+    # train_step_opt = torch.compile(train_step, mode='reduce-overhead')
     running_loss = []
     for epoch in range(1, config.epochs + 1):
         model.train()
         epoch_start = time.time()
         for step, (img, gt) in enumerate(trainloader):
-            optimizer.zero_grad()
-            with torch.autocast(device_type='cuda'):
-                model_output = model(img.to(config.device))
-
-                loss = sigmoid_focal_loss(
-                    model_output.view(-1),
-                    gt.view(-1).to(config.device),
-                    reduction='mean',
-                )
-
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            loss = train_step(model_opt, optimizer, scaler, img, gt)
 
             # if step % config.log_step == 0 and step != 0:
             # log = f'epoch {epoch + 1}/{config.epochs} ' \
@@ -110,7 +98,7 @@ def train(config):
 
             #     running_loss = []
             # else:
-            running_loss.append(loss.detach().cpu().numpy())
+            running_loss.append(loss)
 
         # global_step = (epoch - 1) * len(trainloader) + step
         # model.eval()
@@ -144,6 +132,25 @@ def train(config):
             save(checkpoint, checkpoint_name)
 
         scheduler.step()
+
+
+def train_step(model, optimizer, scaler, imgs, labels):
+    optimizer.zero_grad(True)
+    with torch.autocast(device_type='cuda'):
+        model_output = model(imgs.to(config.device))
+
+        loss = sigmoid_focal_loss(
+            model_output.view(-1),
+            labels.view(-1).to(config.device),
+            alpha=0.5,
+            reduction='mean',
+        )
+
+    scaler.scale(loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
+
+    return loss.detach().item()
 
 
 if __name__ == "__main__":
