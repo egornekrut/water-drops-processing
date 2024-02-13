@@ -214,6 +214,7 @@ class BubblesProcessor:
     
             bboxes = self.get_bbox_from_mask(bubbles_mask)
             self.statistics[no]['Число пузырей в РЗ'] = len(bboxes)
+            self.statistics[no]['Площадь пузырей в РЗ'] = (np.asarray(bubbles_mask.convert('L')) > 0).sum() * (scale_px_mm ** 2)
 
             bubbles_mask_new = bubbles_mask.copy().convert('RGB')
             orig_crop = answer['orig_zone_crop'].convert('RGB')
@@ -224,8 +225,8 @@ class BubblesProcessor:
             img_size = bubbles_mask_new.size
             for box in bboxes:
                 # bbox_coords = self.xywh_xyxy(box, img_size)
-                draw_mask.rectangle(box, outline=(255,0,0,125))
-                draw_orig.rectangle(box, outline=(255,0,0,125))
+                draw_mask.rectangle(box, outline=(255, 0, 0, 125))
+                draw_orig.rectangle(box, outline=(255, 0, 0, 125))
     
             # item.save(self.output_masks_folder / ('' + f'frame_{no}_masked.png'))
             bubbles_mask_new.save(self.output_boxed_masks_folder / ('' + f'frame_{no}_masked_boxes.png'))
@@ -321,7 +322,7 @@ class BubblesProcessor:
     #     mask_pil.save(out_dir / (file.stem + '_mask.' + file.suffix))
     
     @torch.inference_mode()
-    def find_first_frame(self, vid_path: Path, ff_thres = 0.5):
+    def find_first_frame(self, vid_path: Path, ff_thres = 0.9):
         ff_dataset = FFInfDataset(vid_path=vid_path)
         all_probs = [0, 0]
         fframe_res = 0
@@ -329,23 +330,22 @@ class BubblesProcessor:
 
         for idx in itetator:
             frame_pack = ff_dataset[idx]
-            itetator.set_description(f'Выполняется поиск певого кадра')
+            itetator.set_description(f'Выполняется поиск контакта')
             
             with torch.autocast(device_type=self.config.device):
                 prob = self.fframe_model(frame_pack.unsqueeze(0).to(self.config.device)).sigmoid().to(device='cpu', dtype=torch.float32).squeeze()
             all_probs.append(prob.item())
 
             if prob > ff_thres:
-                # Считаем, что первый кадр, пробивший вероятность является первым
                 fframe_res = idx
                 break
 
         like_hood_ff = np.argmax(all_probs)
         self.ffprobs_plot = plt.plot(all_probs, label='Вероятности')
-        self.ffprobs_plot = plt.vlines(x = like_hood_ff, ymin=0, ymax=max(all_probs) + 0.1, colors='red', label=f'Предполагаемый первый кадр: {np.argmax(all_probs)}, p = {np.max(all_probs):.2f}', ls=':', lw=2)
+        self.ffprobs_plot = plt.vlines(x = like_hood_ff, ymin=0, ymax=max(all_probs) + 0.1, colors='red', label=f'Предполагаемый момент контакта: {np.argmax(all_probs)}, p = {np.max(all_probs):.2f}', ls=':', lw=2)
         plt.xlabel('Кадры')
         plt.ylabel('Вероятность')
-        plt.title('Распределение вероятностей первых кадров по видео')
+        plt.title('Распределение вероятностей момента контакта')
         plt.legend()
 
         return fframe_res
@@ -379,11 +379,12 @@ class BubblesProcessor:
         if self.auto_frame and start_frame == 0:
             start_frame = self.find_first_frame(vid_path, auto_frame_thres)
             if start_frame != 0:
-                start_frame = max(start_frame - auto_frame_first_offset, 0)
+                print(f'Момент контакта был автоматически обнаружен: {start_frame}.')
+                start_frame = max(start_frame + auto_frame_first_offset, 0)
                 end_frame = min(start_frame + auto_frame_last_offset, len(cine_images))
-                print(f'Первый кадр автоматически обнаружен: {start_frame}. Задам последний кадр: {end_frame}.')
+                print(f'Итоговый интервал кадров для обработки: {start_frame} - {end_frame}.')
             else:
-                print('Первый кадр не был обнаружен. Перезапустите процесс с ручной настройкой!')
+                print('Первый кадр не был обнаружен. Перезапустите процесс с ручной настройкой или понизьте порог для момента контакта!')
                 return None
 
         if end_frame == -1:
