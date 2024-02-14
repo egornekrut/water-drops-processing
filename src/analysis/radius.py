@@ -34,7 +34,7 @@ def ray_radius_estimator(img_mask: np.ndarray, n_radius: int = 16) -> float:
         step = 1  # Adjust the step size for finer resolution
 
         # Move along the segment until a black pixel is encountered or the border of the image is reached
-        while img_mask.getpixel((x, y)) != 0 and 0 <= x < width and 0 <= y < height:
+        while 0 <= x < width and 0 <= y < height and img_mask.getpixel((x, y)) != 0:
             x = int(c_mass_x + step * np.cos(angle))
             y = int(c_mass_y + step * np.sin(angle))
             step += 1

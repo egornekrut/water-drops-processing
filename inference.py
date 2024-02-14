@@ -45,7 +45,7 @@ class BubblesProcessor:
             fframe_model.load_state_dict(torch.load(self.config.fframe_ckpt_path, map_location='cpu'))
             fframe_model.to(self.config.device)
             fframe_model.eval()
-            self.fframe_model = torch.compile(fframe_model)
+            self.fframe_model = fframe_model
 
         self.ffprobs_plot = None
 
@@ -333,8 +333,8 @@ class BubblesProcessor:
             itetator.set_description(f'Выполняется поиск контакта')
             
             with torch.autocast(device_type=self.config.device):
-                prob = self.fframe_model(frame_pack.unsqueeze(0).to(self.config.device)).sigmoid().to(device='cpu', dtype=torch.float32).squeeze()
-            all_probs.append(prob.item())
+                prob = self.fframe_model(frame_pack.unsqueeze(0).to(self.config.device)).sigmoid().to(device='cpu', dtype=torch.float32).squeeze().item()
+            all_probs.append(prob)
 
             if prob > ff_thres:
                 fframe_res = idx
@@ -490,13 +490,13 @@ class BubblesProcessor:
 
                 bboxes[cls_int] = yolo_answer.boxes.xyxy[cls_enum].cpu().numpy()
 
-                if cls_int == 0:
+                if cls_int == 0 and pic_channel.sum():
                     n_radius = kwargs.get('n_radius', 32)
                     answer[f'Диаметр_лучи_{n_radius}'] = ray_radius_estimator(pic_channel * 255, n_radius)
                     answer['Диаметр_бокс'] = float(yolo_answer.boxes.xywh[cls_int, 2:].mean().cpu())
                     answer['Диаметр_pir2'] = 2 * np.sqrt(pic_channel.sum() / np.pi)
 
-                elif cls_int == 1:
+                elif cls_int == 1 and pic_channel.sum():
                     bounding_box = [int(np.round(i)) for i in bboxes[cls_int]]
                     orig_zone_crop = image_pil.crop(bounding_box).convert('L')
 
@@ -512,7 +512,7 @@ class BubblesProcessor:
                     masked_bubs = bubbles * mask_zone
                     answer['cropped_bubbles_masked'] = Image.fromarray(masked_bubs)
 
-                elif cls_int == 2:
+                elif cls_int == 2 and pic_channel.sum():
                     # Разрывы
                     ruptures[..., 0] += pic_channel * 255
                     ruptures[..., 2] += pic_channel * 255
