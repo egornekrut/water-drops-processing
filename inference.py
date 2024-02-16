@@ -74,7 +74,7 @@ class BubblesProcessor:
         frame_step: int = 1,
         end_frame: int = -1,
         save_orig_frames: bool = True,
-        save_crops: bool = True,
+        save_ext_pics: bool = True,
         save_plotted_results: bool = True,
         save_txt: bool = False,
         scale_px_mm: float = 1,
@@ -83,12 +83,23 @@ class BubblesProcessor:
         auto_frame_thres: float = 0.5,
     ):
         self.statistics = {}
-        if not out_dir.exists():
-            out_dir.mkdir(parents=True)
 
         if input_arg.is_dir():
-            raise NotImplementedError
-            self.process_dir(input_arg, out_dir)
+            self.process_dir(
+                input_arg,
+                out_dir,
+                start_frame,
+                frame_step,
+                end_frame,
+                save_orig_frames,
+                save_ext_pics,
+                save_plotted_results,
+                save_txt,
+                scale_px_mm,
+                auto_frame_first_offset,
+                auto_frame_last_offset,
+                auto_frame_thres,
+            )
 
         elif input_arg.is_file() and input_arg.suffix == '.mp4':
             self.process_video(
@@ -98,7 +109,7 @@ class BubblesProcessor:
                 frame_step,
                 end_frame,
                 save_orig_frames,
-                save_crops,
+                save_ext_pics,
                 save_plotted_results,
                 save_txt,
                 scale_px_mm,
@@ -111,7 +122,7 @@ class BubblesProcessor:
                 frame_step,
                 end_frame,
                 save_orig_frames,
-                save_crops,
+                save_ext_pics,
                 save_plotted_results,
                 save_txt,
                 scale_px_mm,
@@ -130,19 +141,11 @@ class BubblesProcessor:
         self,
         out_dir: Path,
         save_orig_frames: bool = True,
-        save_crops: bool = True,
+        save_ext_pics: bool = True,
         save_plotted_results: bool = True,
         save_txt: bool = False,
     ) -> None:
         output_pics_folder = out_dir / 'pics'
-        self.output_boxed_masks_folder = output_pics_folder / 'boxed_masks'
-        self.output_boxed_masks_folder.mkdir(exist_ok=True, parents=True)
-
-        self.output_bubs_masks_folder = output_pics_folder / 'bubble_masks'
-        self.output_bubs_masks_folder.mkdir(exist_ok=True, parents=True)
-
-        self.mask_full_folder = output_pics_folder / 'full_masks'
-        self.mask_full_folder.mkdir(exist_ok=True, parents=True)
 
         if save_orig_frames:
             self.original_frames_folder = output_pics_folder / 'original_frames'
@@ -156,14 +159,23 @@ class BubblesProcessor:
         else:
             self.plotted_results_folder = None
 
-        if save_crops:
+        if save_ext_pics:
             self.orig_crops_folder = output_pics_folder / 'orig_crops'
             self.orig_crops_folder.mkdir(exist_ok=True, parents=True)
             self.mask_crops_folder = output_pics_folder / 'mask_crops'
             self.mask_crops_folder.mkdir(exist_ok=True, parents=True)
+            self.output_boxed_masks_folder = output_pics_folder / 'boxed_masks'
+            self.output_boxed_masks_folder.mkdir(exist_ok=True, parents=True)
+            self.output_bubs_masks_folder = output_pics_folder / 'bubble_masks'
+            self.output_bubs_masks_folder.mkdir(exist_ok=True, parents=True)
+            self.mask_full_folder = output_pics_folder / 'full_masks'
+            self.mask_full_folder.mkdir(exist_ok=True, parents=True)
         else:
             self.orig_crops_folder = None
             self.mask_crops_folder = None
+            self.output_boxed_masks_folder = None
+            self.output_bubs_masks_folder = None
+            self.mask_full_folder = None
 
         if save_txt:
             self.txt_folder = output_pics_folder / 'txt_labels'
@@ -176,33 +188,13 @@ class BubblesProcessor:
         return ((box[0] - box[2] / 2) * img_size[0], (box[1] - box[3] / 2) * img_size[1], (box[0] + box[2] / 2) * img_size[0], (box[1] + box[3] / 2) * img_size[1])
 
     def saver(self, answer: Dict, no, scale_px_mm: float = 1., ruptures_stat: bool = True):
-            # if save_plotted_results:
-            #     plotted_results.save(plotted_results_folder / (vid_path.stem + f'_frame_{fno}_plot.png'))
-            # if save_crops:
-            #     cropped_mask.save(mask_crops_folder / (vid_path.stem + f'_frame_{fno}_mask_crop.png'))
-            #     cropped_image.save(orig_crops_folder / (vid_path.stem + f'_frame_{fno}_orig_crop.png'))
-
-            # if save_orig_frames:
-            #     Image.fromarray(frame).save(original_frames_folder / (vid_path.stem + f'_frame_{fno}.png'))
-                
-            # mask_pil.save(output_masks_folder / (vid_path.stem + f'_frame_{fno}_mask.png'))
-            # bub_image.save(output_masks_folder / (vid_path.stem + f'_frame_{fno}_bubles.png'))
-
-        # if 'cropped_bubbles' in answer:
-        #     answer['cropped_bubbles'].save(self.output_masks_folder / ('' + f'frame_{no}.png'))
         self.statistics[no] = {}
+
         for key, elem in answer.items():
             if 'Диаметр' in key:
                 self.statistics[no][key] = elem * scale_px_mm
             if 'Площадь' in key:
                 self.statistics[no][key] = elem * (scale_px_mm ** 2)
-
-        # self.statistics[no] = {
-        #     'Диаметр_w': answer.get('diam_w', 0) * scale_px_mm,
-        #     'Диаметр_h': answer.get('diam_h', 0) * scale_px_mm,
-        #     'Диаметр_avg': (answer.get('diam_h', 0) + answer.get('diam_w', 0)) * scale_px_mm / 2,
-        #     'Площадь_капли': answer.get('droplet_area', 0) * (scale_px_mm ** 2),
-        # }
 
         if ruptures_stat:
             self.statistics[no]['Число разрывов'] = len(answer['ruptures_stat'])
@@ -210,27 +202,27 @@ class BubblesProcessor:
 
         if 'cropped_bubbles_masked' in answer:
             bubbles_mask = answer['cropped_bubbles_masked']
-            bubbles_mask.save(self.output_bubs_masks_folder / ('' + f'frame_{no}_masked_bubles.png'))
     
             bboxes = self.get_bbox_from_mask(bubbles_mask)
             self.statistics[no]['Число пузырей в РЗ'] = len(bboxes)
             self.statistics[no]['Площадь пузырей в РЗ'] = (np.asarray(bubbles_mask.convert('L')) > 0).sum() * (scale_px_mm ** 2)
 
-            bubbles_mask_new = bubbles_mask.copy().convert('RGB')
-            orig_crop = answer['orig_zone_crop'].convert('RGB')
+            if self.output_bubs_masks_folder:
+                bubbles_mask.save(self.output_bubs_masks_folder / ('' + f'frame_{no}_masked_bubles.png'))
 
-            draw_orig = ImageDraw.Draw(orig_crop)
-            draw_mask = ImageDraw.Draw(bubbles_mask_new)
-    
-            img_size = bubbles_mask_new.size
-            for box in bboxes:
-                # bbox_coords = self.xywh_xyxy(box, img_size)
-                draw_mask.rectangle(box, outline=(255, 0, 0, 125))
-                draw_orig.rectangle(box, outline=(255, 0, 0, 125))
-    
-            # item.save(self.output_masks_folder / ('' + f'frame_{no}_masked.png'))
-            bubbles_mask_new.save(self.output_boxed_masks_folder / ('' + f'frame_{no}_masked_boxes.png'))
-            orig_crop.save(self.output_boxed_masks_folder / ('' + f'frame_{no}_orig_bubbles.png'))
+            if self.output_boxed_masks_folder is not None:
+                bubbles_mask_new = bubbles_mask.copy().convert('RGB')
+                orig_crop = answer['orig_zone_crop'].convert('RGB')
+
+                draw_orig = ImageDraw.Draw(orig_crop)
+                draw_mask = ImageDraw.Draw(bubbles_mask_new)
+        
+                for box in bboxes:
+                    draw_mask.rectangle(box, outline=(255, 0, 0, 125))
+                    draw_orig.rectangle(box, outline=(255, 0, 0, 125))
+        
+                bubbles_mask_new.save(self.output_boxed_masks_folder / ('' + f'frame_{no}_masked_boxes.png'))
+                orig_crop.save(self.output_boxed_masks_folder / ('' + f'frame_{no}_orig_bubbles.png'))
         else:
             self.statistics[no]['Число пузырей в РЗ'] = 0
 
@@ -257,7 +249,7 @@ class BubblesProcessor:
         frame_step: int = 1,
         end_frame: int = -1,
         save_orig_frames: bool = True,
-        save_crops: bool = True,
+        save_ext_pics: bool = True,
         save_plotted_results: bool = True,
         save_txt: bool = False,
         scale_px_mm: float = 1.,
@@ -265,7 +257,7 @@ class BubblesProcessor:
         self.setup_output_folders(
             out_dir,
             save_orig_frames,
-            save_crops,
+            save_ext_pics,
             save_plotted_results,
             save_txt,
         )
@@ -296,17 +288,41 @@ class BubblesProcessor:
     
         pd.DataFrame.from_dict(self.statistics, orient='index').to_excel(out_dir / f'{vid_path.stem}_stat.xlsx')
 
-    def process_dir(self, in_dir: Path, out_dir: Path):
-        raise NotImplementedError
-
-        if not out_dir.exists():
-            out_dir.mkdir(parents=True)
-
+    def process_dir(
+        self,
+        in_dir: Path,
+        out_dir: Path,
+        start_frame: int = 0,
+        frame_step: int = 1,
+        end_frame: int = -1,
+        save_orig_frames: bool = True,
+        save_ext_pics: bool = True,
+        save_plotted_results: bool = True,
+        save_txt: bool = False,
+        scale_px_mm: float = 1.,
+        auto_frame_first_offset: int = -10,
+        auto_frame_last_offset: int = 200,
+        auto_frame_thres: float = 0.5,
+    ):
         for file in in_dir.glob('*.*'):
-            if not file.suffix.lower() in self.image_extensions:
-                continue
-            self.process_image(file, out_dir)
-
+            if file.suffix.lower() == '.cine':
+                vid_out_dir = out_dir / file.stem
+                vid_out_dir.mkdir(parents=True, exist_ok=False)
+                self.process_cine_video(
+                    file,
+                    vid_out_dir,
+                    start_frame,
+                    frame_step,
+                    end_frame,
+                    save_orig_frames,
+                    save_ext_pics,
+                    save_plotted_results,
+                    save_txt,
+                    scale_px_mm,
+                    auto_frame_first_offset,
+                    auto_frame_last_offset,
+                    auto_frame_thres,
+                )
     # def process_image(self, file, out_dir, save_txt=False):
     #     image = Image.open(file)
 
@@ -358,18 +374,18 @@ class BubblesProcessor:
         frame_step: int = 1,
         end_frame: int = -1,
         save_orig_frames: bool = True,
-        save_crops: bool = True,
+        save_ext_pics: bool = True,
         save_plotted_results: bool = True,
         save_txt: bool = False,
         scale_px_mm: float = 1.,
         auto_frame_first_offset: int = -10,
         auto_frame_last_offset: int = 200,
         auto_frame_thres: float = 0.5,
-    ):
+    ):  
         self.setup_output_folders(
             out_dir,
             save_orig_frames,
-            save_crops,
+            save_ext_pics,
             save_plotted_results,
             save_txt,
         )
@@ -622,7 +638,7 @@ def parce_input_args():
         help='Is to save original video frames.',
     )
     parser.add_argument(
-        '--save-crops',
+        '--save-ext-pics',
         default=False,
         type=bool,
         help='Is to save cropped version of frames.',
@@ -665,7 +681,7 @@ def parce_input_args():
     config.save_orig_frames = args.save_orig_frames
     config.prob_thres = args.prob_thres if args.prob_thres != -1 else config.prob_thres
     
-    config.save_crops = args.save_crops
+    config.save_ext_pics = args.save_ext_pics
     config.save_plots = args.save_plots
     config.save_txt = args.save_txt
 
@@ -682,7 +698,7 @@ if __name__ == '__main__':
         config.frame_step,
         config.end_frame,
         config.save_orig_frames,
-        config.save_crops,
+        config.save_ext_pics,
         config.save_plots,
         config.save_txt,
     )
