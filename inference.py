@@ -381,7 +381,8 @@ class BubblesProcessor:
         auto_frame_first_offset: int = -10,
         auto_frame_last_offset: int = 200,
         auto_frame_thres: float = 0.5,
-    ):  
+    ): 
+        self.statistics = {}
         self.setup_output_folders(
             out_dir,
             save_orig_frames,
