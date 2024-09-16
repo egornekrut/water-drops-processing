@@ -1,15 +1,16 @@
 from functools import partial
-from typing import Callable
+from pathlib import Path
+from typing import Callable, Literal, Optional
 
 import torch
 from torch import Tensor
 from torch.nn import (AdaptiveAvgPool3d, BatchNorm3d, Conv3d, Dropout, Linear,
-                      Module, Sequential, SiLU, Sigmoid)
+                      Module, Sequential, SiLU)
 from torchvision.ops import StochasticDepth
 
 
 class FrameClassModel(Module):
-    def __init__(self, batch_size: int) -> None:
+    def __init__(self, batch_size: int, model_weights: Optional[Path] = None) -> None:
         super().__init__()
         self.batch_size = batch_size
         self.model = Sequential(
@@ -35,10 +36,13 @@ class FrameClassModel(Module):
             Linear(64, 1),
         )
 
+        if model_weights is not None:
+            self.load_state_dict(torch.load(model_weights, map_location='cpu'))
+
     def forward(self, x: Tensor):
         feats = self.model(x).view(self.batch_size, -1)
-
         return self.classifier(feats)
+
 
 class MBConvPlusBlock(Module):
     def __init__(
@@ -137,3 +141,14 @@ class SqueezeExcitation(Module):
     def forward(self, input: Tensor) -> Tensor:
         scale = self._scale(input)
         return scale * input
+
+# from torchvision.models.video import r2plus1d_18, swin3d_t
+# class TorchVideoModel(model_name=Literal['swin-t', 'resnet2+1']):
+#     if model_name == 'swin-t':
+#         model = swin3d_t(weights=None, progress=False)
+#     elif model_name == 'resnet2+1':
+#         model = r2plus1d_18(weights=None, progress=False)
+#     else:
+#         raise NotImplementedError
+
+#     return model

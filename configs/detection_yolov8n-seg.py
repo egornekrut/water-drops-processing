@@ -22,12 +22,18 @@ config.model = 'yolov8n-seg.pt'
 config.device = 'cuda:0'
 
 config.yolo_configuration = {
-    'weights': '.weights/yolon-seg_sep14_data.pt',
+    'weights': './weights/yolon-seg_sep14_data.pt',
     'inference_config': {
         'retina_masks': True,
         'half': True,
         'agnostic_nms': True,
         'conf': 0.45,
         'verbose': False,
+        'tracker': 'botsort.yaml',
+        'track_high_thresh': 0.45,
     },
+}
+config.contact_frame_model = {
+    'weights': './weights/fframe_v2.pt',
+    'thres': 0.6,
 }
