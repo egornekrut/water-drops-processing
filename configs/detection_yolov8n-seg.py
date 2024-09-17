@@ -30,7 +30,6 @@ config.yolo_configuration = {
         'conf': 0.45,
         'verbose': False,
         'tracker': 'botsort.yaml',
-        'track_high_thresh': 0.45,
     },
 }
 config.contact_frame_model = {
