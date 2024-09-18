@@ -21,3 +21,5 @@ dependencies:
     - PIMS==0.7
     - openpyxl==3.1.5
     - notebook
+    - shapely
+    - lapx
