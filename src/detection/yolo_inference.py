@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
@@ -26,7 +26,7 @@ class YoloDetectorModel(BasicModelPipeline):
         super().__init__(model_config, ['image'], ['full_mask'], device)
         self.num_radius = 32
 
-    def _setup_model(self, model_config: EasyDict) -> YOLO:
+    def _setup_model(self) -> YOLO:
         return YOLO(model=self.model_config.weights, task='segment')
 
     def _model_inference(
@@ -134,12 +134,12 @@ class ContactFinderModel(BasicModelPipeline):
         super().__init__(model_config, ['video_path'], ['is_contact'], device)
         self.cf_thres = model_config['thres']
 
-    def _setup_model(self, model_config: EasyDict) -> FrameClassModel:
-        model = FrameClassModel(1, model_config['weights'])
+    def _setup_model(self) -> FrameClassModel:
+        model = FrameClassModel(1, self.model_config['weights'])
         model.eval()
         return model
 
-    def _preprocess(self, input_data: Dict[str, pims.ImageSequence]) -> pims.ImageSequence:
+    def _preprocess(self, input_data: Dict[str, Iterable]) -> Iterable:
         """Preprocess input data before passing to the model.
 
         Args:
@@ -152,7 +152,7 @@ class ContactFinderModel(BasicModelPipeline):
 
     def _model_inference(
         self,
-        image_sequence: pims.ImageSequence,
+        image_sequence: Iterable,
     ) -> Dict[str, Any]:
         cf_frame = 0
         cf_probs = [0., 0.]
@@ -269,7 +269,7 @@ class VideoProcessor(BasicProcessor):
 
         return metadata_dict
     
-    def _find_video_bounds(self, frame_stream: pims.ImageSequence) -> Tuple[int, int]:
+    def _find_video_bounds(self, frame_stream: Iterable) -> Tuple[int, int]:
         start_frame = 0
         end_frame = self.maximum_frame_count
 

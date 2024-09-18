@@ -28,7 +28,7 @@ class BasicModelPipeline:
     ) -> None:
         self.model_config = model_config
 
-        self.model = self._setup_model(model_config)
+        self.model = self._setup_model()
         self.device = device if torch.cuda.is_available() and device else 'cpu'
 
         self.model.to(self.device)
@@ -44,7 +44,7 @@ class BasicModelPipeline:
 
         return self._postprocess(output)
 
-    def _setup_model(self, model_config: EasyDict) -> Callable:
+    def _setup_model(self) -> Callable:
         raise NotImplementedError
 
     def _preprocess(self, input_data: Any) -> Any:
