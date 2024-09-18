@@ -1,17 +1,11 @@
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
-import cv2
-import numpy as np
-import pims
 import torch
 from easydict import EasyDict
-from PIL import Image, ImageDraw
+from PIL import Image
 from tqdm import tqdm
-from ultralytics import YOLO
-from ultralytics.engine.results import Results
 
-from src.analysis.radius import ray_radius_estimator
 from src.utils.config import get_config_from_path
 
 image_extensions = ('.png', '.jpeg', '.jpg')
