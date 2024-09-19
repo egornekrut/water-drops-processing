@@ -77,7 +77,7 @@ class FFInfDataset(Dataset):
 
 
 def normalize_cine(arr: np.ndarray) -> np.ndarray:
-    """This normalizes an array to values between -1 and 1.
+    """This normalizes an array to values between 0 and 1.
 
     Parameters
     ----------

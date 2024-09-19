@@ -27,7 +27,7 @@ class YoloDetectorModel(BasicModelPipeline):
         super().__init__(
             model_config,
             ['image'],
-            ['full_mask', 'ruptures_stat', 'droplet_stat', 'plot'],
+            ['full_mask_bool', 'full_mask', 'ruptures_stat', 'droplet_stat', 'plot'],
             device,
         )
 
@@ -93,6 +93,7 @@ class YoloDetectorModel(BasicModelPipeline):
 
                 elif class_id == 2:
                     # Ruptures
+                    all_masks[..., 0] = all_masks[..., 0] & ~single_class_mask
                     unique_ids = yolo_answer.boxes.id[objects_indices].cpu().numpy()
                     rupture_masks = masks[objects_indices]
                     rupture_bboxes = bboxes[objects_indices]
@@ -117,7 +118,9 @@ class YoloDetectorModel(BasicModelPipeline):
                                 bbox_x1x2_torch[objects_indices][min_index].unsqueeze(0),
                             ).item()
 
-        answer['full_mask'] = all_masks
+        answer['full_mask_bool'] = all_masks
+        answer['full_mask'] = Image.fromarray(all_masks.astype(np.uint8) * 255)
+
         answer['plot'] = Image.fromarray(yolo_answer.plot(conf=False, line_width=1, font_size=10))
 
         return answer
@@ -226,6 +229,8 @@ class VideoProcessor(BasicProcessor):
             return rules
 
         exp_path = Path(self.result_dir) / self.exp_name
+        exp_path.mkdir(parents=True, exist_ok=True)
+        print(f'Results will be here: {exp_path.as_posix()}')
 
         if self.save_all_pics:
             rules.update({
@@ -345,7 +350,7 @@ class VideoProcessor(BasicProcessor):
                         {
                             real_frame_idx: {
                                 'num_ruptures': len(stat),
-                                'ruptures_total_area': frame_results['full_mask'][..., 2].sum(),
+                                'ruptures_total_area': frame_results['full_mask_bool'][..., 2].sum(),
                             },
                         },
                         orient='index',
