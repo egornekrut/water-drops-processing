@@ -94,10 +94,14 @@ class YoloDetectorModel(BasicModelPipeline):
                 elif class_id == 2:
                     # Ruptures
                     all_masks[..., 0] = all_masks[..., 0] & ~single_class_mask
-                    unique_ids = yolo_answer.boxes.id[objects_indices].cpu().numpy()
                     rupture_masks = masks[objects_indices]
                     rupture_bboxes = bboxes[objects_indices]
-                    
+                    try:
+                        unique_ids = yolo_answer.boxes.id[objects_indices].cpu().numpy()
+                    except TypeError:
+                        # No tracked ruptures
+                        continue
+
                     for curr_id, (unique_id, rupture_mask, rupture_bbox) in enumerate(zip(unique_ids, rupture_masks, rupture_bboxes)):
                         distance = np.linalg.norm(rupture_bbox[:2].reshape(1, -1) - rupture_bboxes[:, :2], axis=1)
                         distance[curr_id] = np.inf
