@@ -183,6 +183,7 @@ class VideoProcessor(BasicProcessor):
                 'image': {'path': exp_path / 'original_frames'},
                 'full_mask': {'path': exp_path / 'full_masks'},
                 'bubbles_mask': {'path': exp_path  / 'bubble_masks'},
+                'original_bubble_masked': {'path': exp_path / 'original_bubble_masked'},
             })
         
         if self.make_video:
@@ -288,6 +289,8 @@ class VideoProcessor(BasicProcessor):
         df_rupture_track_results = pd.DataFrame()
         df_rupture_all_results = pd.DataFrame()
         df_bubbles_area_results = pd.DataFrame()
+        df_bubbles_hist_results = pd.DataFrame()
+
         rupture_life = {}
         death_successors = {}
 
@@ -323,8 +326,13 @@ class VideoProcessor(BasicProcessor):
                             rupture_life[rupt_idx] = {frame_idx: single_rupture_stat}
 
                 elif name == 'bubbles_stat':
+                    hist = stat.pop('diam_hist', None)
+
                     bubbles_stat = pd.DataFrame.from_dict({real_frame_idx: stat}, orient='index')
                     df_bubbles_area_results = pd.concat((df_bubbles_area_results, bubbles_stat))
+
+                    bubbles_hist = pd.DataFrame.from_dict({real_frame_idx: hist}, orient='index')
+                    df_bubbles_hist_results = pd.concat((df_bubbles_hist_results, bubbles_hist))
 
         for rupt_idx, rupture_stat in rupture_life.items():
             dead_frame = max(list(rupture_stat.keys()))
@@ -343,6 +351,7 @@ class VideoProcessor(BasicProcessor):
             df_rupture_track_results.to_excel(writer, sheet_name='Ruptures_Track_Area', float_format="%.3f")
             df_rupture_all_results.to_excel(writer, sheet_name='Ruptures_All', float_format="%.3f")
             df_bubbles_area_results.to_excel(writer, sheet_name='Bubbles_Area_Num', float_format="%.3f")
+            df_bubbles_hist_results.sort_index(axis=1).to_excel(writer, sheet_name='Bubbles_Diam_Hist', float_format="%.3f")
             pd.DataFrame.from_dict(death_successors, orient='index').to_excel(writer, sheet_name='Ruptures_Death', float_format="%.3f")
 
     def _rupture_and_bubbles_analysis(self, states: Dict[str, Any]):

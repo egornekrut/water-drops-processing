@@ -27,7 +27,7 @@ def xywh_xyxy(box, img_size):
     return ((box[0] - box[2] / 2) * img_size[0], (box[1] - box[3] / 2) * img_size[1], (box[0] + box[2] / 2) * img_size[0], (box[1] + box[3] / 2) * img_size[1])
 
 
-def determine_bboxes(mask: np.ndarray):
+def determine_bboxes(mask: np.ndarray, min_diam: int = 1):
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     img_wh = mask.shape
 
@@ -38,14 +38,15 @@ def determine_bboxes(mask: np.ndarray):
         maxed = contours[i][:, 0, :].max(0)
         bbox_coords = (mined[0], mined[1], maxed[0], maxed[1])
 
-        if bbox_coords[2] - bbox_coords[0] < 2 or bbox_coords[3] - bbox_coords[1] < 2:
+        if min(bbox_coords[2] - bbox_coords[0], bbox_coords[3] - bbox_coords[1]) <= min_diam:
             continue
-        shape_norm = (
-            (bbox_coords[2] + bbox_coords[0]) / (2 * img_wh[0]),
-            (bbox_coords[3] + bbox_coords[1]) / (2 * img_wh[1]),
-            (bbox_coords[2] - bbox_coords[0]) / img_wh[0],
-            (bbox_coords[3] - bbox_coords[1]) / img_wh[1],
-        )
-        all_bboxes.append(shape_norm)
+        # TODO: Убрать
+        # shape_norm = (
+        #     (bbox_coords[2] + bbox_coords[0]) / (2 * img_wh[0]),
+        #     (bbox_coords[3] + bbox_coords[1]) / (2 * img_wh[1]),
+        #     (bbox_coords[2] - bbox_coords[0]) / img_wh[0],
+        #     (bbox_coords[3] - bbox_coords[1]) / img_wh[1],
+        # )
+        all_bboxes.append(bbox_coords)
 
     return all_bboxes
