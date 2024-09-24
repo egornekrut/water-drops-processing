@@ -120,3 +120,9 @@ debug.ipynb
 weights/
 runs/
 saved_pics/
+
+*.csv
+*.yaml
+*.yml
+*.parquet
+*.xlsx

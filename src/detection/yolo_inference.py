@@ -6,15 +6,14 @@ import numpy as np
 import pandas as pd
 import pims
 from torchvision.ops import box_iou
-import torch
 from easydict import EasyDict
 from PIL import Image, ImageDraw
-from tqdm import tqdm
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
 from src.analysis.radius import ray_diameter_estimator
-from src.fframe.model import FrameClassModel
+from src.fframe.inference import ContactFinderModel
+from src.segmentation.inference import BubbleSegmentation
 from src.utils.inference_v2 import BasicModelPipeline, BasicProcessor
 
 
@@ -30,6 +29,7 @@ class YoloDetectorModel(BasicModelPipeline):
             ['full_mask_bool', 'full_mask', 'ruptures_stat', 'droplet_stat', 'plot'],
             device,
         )
+        self.mask_divider = 32
 
     def _setup_model(self) -> YOLO:
         return YOLO(model=self.model_config.weights, task='segment')
@@ -90,6 +90,8 @@ class YoloDetectorModel(BasicModelPipeline):
                     answer['droplet_stat']['droplet_diam_rays_32'] = ray_diam
                     answer['droplet_stat']['droplet_diam_pir2'] = 2 * np.sqrt(single_class_mask.sum() / np.pi)
                     answer['droplet_stat']['droplet_mass_center'] = (center_x, center_y)
+                    # TODO: Add bbox saving for droplets
+                    # answer['droplet_stat']['bbox'] = bboxes[objects_indices[largest_id]]
 
                 elif class_id == 2:
                     # Ruptures
@@ -130,68 +132,6 @@ class YoloDetectorModel(BasicModelPipeline):
         return answer
 
 
-class ContactFinderModel(BasicModelPipeline):
-    def __init__(
-        self,
-        model_config,
-        device: Optional[str] = None,
-    ) -> None:
-        super().__init__(model_config, ['video_path'], ['is_contact'], device)
-        self.cf_thres = model_config['thres']
-
-    def _setup_model(self) -> FrameClassModel:
-        model = FrameClassModel(1, self.model_config['weights'])
-        model.eval()
-        return model
-
-    def _preprocess(self, input_data: Dict[str, Iterable]) -> Iterable:
-        """Preprocess input data before passing to the model.
-
-        Args:
-            input_data (Any): Data to be processed by the model
-
-        Returns:
-            Any: Processed data
-        """
-        return input_data['image_sequence']
-
-    def _model_inference(
-        self,
-        image_sequence: Iterable,
-    ) -> Dict[str, Any]:
-        cf_frame = 0
-        cf_probs = [0., 0.]
-
-        iterator = tqdm(range(2, len(image_sequence) - 2), total=len(image_sequence) - 2)
-
-        for idx in iterator:
-            image_series = np.asarray(image_sequence[idx - 2:idx + 3], np.float32)
-            image_series = self.normalize_cine(image_series) * 2 - 1
-            image_series_tensor = torch.from_numpy(image_series).unsqueeze(0).unsqueeze(0).to(device=self.device)
-
-            cf_res: torch.Tensor = self.model.forward(
-               image_series_tensor,
-            )
-            cf_prob = cf_res.sigmoid().item()
-            cf_probs.append(cf_prob)
-
-            if cf_prob > self.cf_thres:
-                cf_frame = idx
-                break
-    
-        return {'is_contact': cf_frame, 'cf_probs': cf_probs}
-
-    @staticmethod
-    def normalize_cine(arr: np.ndarray) -> np.ndarray:
-        """This normalizes an array to values between 0 and 1."""
-        ptp = arr.max(axis=(1,2)) - arr.min(axis=(1,2))
-        # Handle edge case of a flat image.
-
-        scaled_arr = (arr - arr.min(axis=(1,2)).reshape(-1, 1, 1)) / ptp.reshape(-1, 1, 1)
-
-        return scaled_arr
-
-
 class VideoProcessor(BasicProcessor):
     def __init__(
         self,
@@ -201,6 +141,7 @@ class VideoProcessor(BasicProcessor):
         save_all_pics: bool = False,
         maximum_frame_count: int = 500,
         contact_frame_offset: int = -5,
+        max_backward_frames: int = 50,
     ) -> None:
         super().__init__(config, result_dir)
         self.curr_video_format = None
@@ -221,6 +162,7 @@ class VideoProcessor(BasicProcessor):
             self.cf_model = None
 
         self.start_frame = 0
+        self.max_backward_frames = max_backward_frames
 
     def set_formats(self):
         return ('.mp4', '.cine')
@@ -240,6 +182,7 @@ class VideoProcessor(BasicProcessor):
             rules.update({
                 'image': {'path': exp_path / 'original_frames'},
                 'full_mask': {'path': exp_path / 'full_masks'},
+                'bubbles_mask': {'path': exp_path  / 'bubble_masks'},
             })
         
         if self.make_video:
@@ -256,6 +199,7 @@ class VideoProcessor(BasicProcessor):
     def setup_model_pipeline(self) -> List[BasicModelPipeline]:
         return [
             YoloDetectorModel(self.config.yolo_configuration, device=self.config.device),
+            BubbleSegmentation(self.config.segmentation_model, device=self.config.device),
         ]
 
     def _open_file(self, input_file: Path) -> Dict[str, Any]:
@@ -326,6 +270,8 @@ class VideoProcessor(BasicProcessor):
             self.form_result_xlsx(states)
         except Exception as e:
             print(f'Error while forming the result xlsx file: {e}')
+        # TODO: Add processing for ruptures
+        # self._rupture_and_bubbles_analysis(states)
 
         return states
 
@@ -340,7 +286,8 @@ class VideoProcessor(BasicProcessor):
         df_diam_results = pd.DataFrame()
         df_rupture_basic_results = pd.DataFrame()
         df_rupture_track_results = pd.DataFrame()
-        df_rupture_all_result = pd.DataFrame()
+        df_rupture_all_results = pd.DataFrame()
+        df_bubbles_area_results = pd.DataFrame()
         rupture_life = {}
         death_successors = {}
 
@@ -367,13 +314,17 @@ class VideoProcessor(BasicProcessor):
                         orient='index',
                     )
                     df_rupture_track_results = pd.concat((df_rupture_track_results, rupture_area_single_stat))
-                    df_rupture_all_result = pd.concat((df_rupture_all_result, pd.DataFrame.from_dict({real_frame_idx: stat}, orient='index')))
+                    df_rupture_all_results = pd.concat((df_rupture_all_results, pd.DataFrame.from_dict({real_frame_idx: stat}, orient='index')))
 
                     for rupt_idx, single_rupture_stat in stat.items():
                         if rupt_idx in rupture_life:
                             rupture_life[rupt_idx][frame_idx] = single_rupture_stat
                         else:
                             rupture_life[rupt_idx] = {frame_idx: single_rupture_stat}
+
+                elif name == 'bubbles_stat':
+                    bubbles_stat = pd.DataFrame.from_dict({real_frame_idx: stat}, orient='index')
+                    df_bubbles_area_results = pd.concat((df_bubbles_area_results, bubbles_stat))
 
         for rupt_idx, rupture_stat in rupture_life.items():
             dead_frame = max(list(rupture_stat.keys()))
@@ -390,8 +341,30 @@ class VideoProcessor(BasicProcessor):
             df_diam_results.to_excel(writer, sheet_name='Droplet_Diam', float_format="%.3f")
             df_rupture_basic_results.to_excel(writer, sheet_name='Ruptures_Total', float_format="%.3f")
             df_rupture_track_results.to_excel(writer, sheet_name='Ruptures_Track_Area', float_format="%.3f")
-            df_rupture_all_result.to_excel(writer, sheet_name='Ruptures_All', float_format="%.3f")
+            df_rupture_all_results.to_excel(writer, sheet_name='Ruptures_All', float_format="%.3f")
+            df_bubbles_area_results.to_excel(writer, sheet_name='Bubbles_Area_Num', float_format="%.3f")
             pd.DataFrame.from_dict(death_successors, orient='index').to_excel(writer, sheet_name='Ruptures_Death', float_format="%.3f")
+
+    def _rupture_and_bubbles_analysis(self, states: Dict[str, Any]):
+        """Find ruptures and check for bubbles anscessors.
+
+        Args:
+            states (Dict[str, Any]): _description_
+        """
+        checked_rupture_ids = []
+
+        for frame_idx, frame_results in states['result'].items():
+            if len(frame_results['ruptures_stat']) > 0:
+                for rupture_id, rupture_stat in frame_results['ruptures_stat'].items():
+                    if rupture_id not in checked_rupture_ids:
+                        bbox_xyxy = (
+                            int(rupture_stat['x_center'] - rupture_stat['width']),
+                            int(rupture_stat['y_center'] - rupture_stat['height']),
+                            int(rupture_stat['x_center'] + rupture_stat['width']),
+                            int(rupture_stat['y_center'] + rupture_stat['height']),
+                        )
+                        for prev_frame_idx in range(frame_idx - 1, max(frame_idx - self.max_backward_frames, states['start_frame']), -1):
+                            prev_frame_mask = states['result'][prev_frame_idx]['bubbles_mask']
 
     def _blend_image_for_video(self, state: Dict[str, Any], frame_idx: int) -> bool:
         if self.video_writer is None:

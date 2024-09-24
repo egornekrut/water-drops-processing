@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
+import numpy as np
 import torch
 from easydict import EasyDict
 from PIL import Image
@@ -26,7 +27,7 @@ class BasicModelPipeline:
         self.device = device if torch.cuda.is_available() and device else 'cpu'
 
         self.model.to(self.device)
-        self.model.compile()
+        # self.model.compile()
 
         self.input_keys = input_keys
         self.output_keys = output_keys
@@ -165,7 +166,7 @@ class BasicProcessor:
             states['result'][frame_idx] = {'image': single_frame_state['image']}
 
             for pipe in self.model_pipeline:
-                single_frame_state = pipe(single_frame_state)
+                single_frame_state = pipe(states['result'][frame_idx])
                 states['result'][frame_idx].update(single_frame_state)
 
             self._save_single_frame_result(states['result'][frame_idx], frame_idx)
@@ -262,11 +263,19 @@ class BasicProcessor:
     def _file_saver(
         self,
         file_path: Path,
-        obj: Image.Image,
+        obj: Union[Image.Image, np.ndarray, None],
     ) -> bool:
-        if file_path.suffix in image_extensions:
+        if file_path.suffix in image_extensions and obj is not None:
             # Save the image as PIL image
-            obj.save(file_path)
+            if isinstance(obj, Image.Image):
+                # Save the image as PIL image
+                obj.save(file_path)
+            elif isinstance(obj, np.ndarray):
+                # Convert numpy array to PIL image and save it
+                Image.fromarray(obj).save(file_path)
+            else:
+                # Failed to save the image
+                print(f'Failed to save {file_path}!')
+                return False
             return True
-
         return False

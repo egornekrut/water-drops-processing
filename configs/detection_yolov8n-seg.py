@@ -27,7 +27,7 @@ config.yolo_configuration = {
         'retina_masks': True,
         'half': True,
         'agnostic_nms': True,
-        'conf': 0.45,
+        'conf': 0.4,
         'verbose': False,
         'tracker': 'botsort.yaml',
     },
@@ -35,4 +35,10 @@ config.yolo_configuration = {
 config.contact_frame_model = {
     'weights': './weights/fframe_v2.pt',
     'thres': 0.6,
+}
+
+config.segmentation_model = {
+    'weights': './weights/unet_efb2_segmentation.pt',
+    'encoder_name': 'efficientnet-b2',
+    'thres': 0.99,
 }
