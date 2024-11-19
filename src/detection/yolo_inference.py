@@ -26,7 +26,11 @@ class YoloDetectorModel(BasicModelPipeline):
         super().__init__(
             model_config,
             ['image'],
-            ['full_mask_bool', 'full_mask', 'ruptures_stat', 'droplet_stat', 'plot'],
+            [
+                'full_mask_bool', 'full_mask',
+                'ruptures_stat', 'droplet_stat',
+                'plot',
+            ],
             device,
         )
         self.mask_divider = 32
@@ -45,8 +49,12 @@ class YoloDetectorModel(BasicModelPipeline):
         )[0]
 
         return self._gather_yolo_results(yolo_res, image_pil)
-    
-    def _gather_yolo_results(self, yolo_answer: Results, image_pil: Image.Image) -> Dict[str, Any]:
+
+    def _gather_yolo_results(
+        self,
+        yolo_answer: Results,
+        image_pil: Image.Image,
+    ) -> Dict[str, Any]:
         """Post-processing of the results from YOLO model.
 
         Args:
@@ -185,7 +193,7 @@ class VideoProcessor(BasicProcessor):
                 'bubbles_mask': {'path': exp_path  / 'bubble_masks'},
                 'original_bubble_masked': {'path': exp_path / 'original_bubble_masked'},
             })
-        
+
         if self.make_video:
             rules['result_video'] = {'save_func': self._blend_image_for_video}
             self.video_writer = cv2.VideoWriter(
@@ -224,7 +232,7 @@ class VideoProcessor(BasicProcessor):
         metadata_dict['end_frame'] = start_frame + len(metadata_dict['stream'])
 
         return metadata_dict
-    
+
     def _find_video_bounds(self, frame_stream: Iterable) -> Tuple[int, int]:
         start_frame = 0
         end_frame = self.maximum_frame_count
@@ -344,7 +352,7 @@ class VideoProcessor(BasicProcessor):
                     has_grown = rupture_life[nearest_id][dead_frame + 1]['px_area'] > 1.2 * rupture_life[nearest_id][dead_frame]['px_area']
                     if has_grown:
                         death_successors[rupt_idx] = {'successor': nearest_id, 'frame': dead_frame + self.start_frame}
-    
+
         with pd.ExcelWriter(exp_path / f'{self.exp_name}_result_stat.xlsx') as writer:
             df_diam_results.to_excel(writer, sheet_name='Droplet_Diam', float_format="%.3f")
             df_rupture_basic_results.to_excel(writer, sheet_name='Ruptures_Total', float_format="%.3f")
